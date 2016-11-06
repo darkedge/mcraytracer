@@ -1,0 +1,16 @@
+[
+{
+  "modid": "mj_raytracer",
+  "name": "Marco's Raytracer",
+  "description": "Renders the world using ray tracing instead of traditional polygon rasterization.",
+  "version": "0.1",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["Marco Jonkers"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
