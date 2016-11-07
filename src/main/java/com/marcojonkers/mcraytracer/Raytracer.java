@@ -3,6 +3,9 @@ package com.marcojonkers.mcraytracer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.VertexBuffer;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
@@ -36,8 +39,29 @@ public class Raytracer {
             // TODO: Remove this when raytracer works
             GlStateManager.clear(16640);
 
-            // Render scene
+            // Obtain texture
             renderJNI();
+
+            GlStateManager.bindTexture(0);
+
+            // Test quad using GL11
+            double height = (double) Minecraft.getMinecraft().displayHeight;
+            double width = (double) Minecraft.getMinecraft().displayWidth;
+
+            Tessellator tessellator = Tessellator.getInstance();
+            VertexBuffer vertexbuffer = tessellator.getBuffer();
+            GlStateManager.enableBlend();
+            GlStateManager.disableTexture2D();
+            GlStateManager.tryBlendFuncSeparate(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
+            GlStateManager.color(1.0f, 0.0f, 0.0f, 1.0f);
+            vertexbuffer.begin(7, DefaultVertexFormats.POSITION);
+            vertexbuffer.pos(0.0, height, 0.0D).endVertex();
+            vertexbuffer.pos(width, height, 0.0D).endVertex();
+            vertexbuffer.pos(width, 0.0, 0.0D).endVertex();
+            vertexbuffer.pos(0.0, 0.0, 0.0D).endVertex();
+            tessellator.draw();
+            GlStateManager.enableTexture2D();
+            GlStateManager.disableBlend();
 
             // Render overlay (Inventory, Menu)
             renderGameOverlay(event.renderTickTime);
