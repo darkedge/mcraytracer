@@ -3,7 +3,7 @@
 #include <cuda_runtime_api.h>
 #include <string>
 
-void Raytrace(JNIEnv* env, cudaGraphicsResource_t dst);
+void Raytrace(JNIEnv* env, cudaGraphicsResource_t dst, int texHeight);
 void Resize(JNIEnv* env, int w, int h);
 
 static void Log(JNIEnv* env, const std::string& stdstr) {

@@ -1,20 +1,18 @@
 package com.marcojonkers.mcraytracer;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.VertexBuffer;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
@@ -29,10 +27,14 @@ public class Raytracer {
     private int displayWidth;
     private int displayHeight;
     private int texture;
-    private ScaledResolution sr;
+
+    private float textureWidth;
+    private float textureHeight;
+    private boolean enabled = true;
 
     public static final String MODID = "mj_raytracer";
     public static final String VERSION = "1.0";
+    private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, "test");
 
     private native void init();
     private native int resize(int width, int height);
@@ -42,7 +44,16 @@ public class Raytracer {
     public void init(FMLInitializationEvent event) {
         mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
+        ClientRegistry.registerKeyBinding(TOGGLE_KEY);
+
         init();
+    }
+
+    @SubscribeEvent
+    public void onClientTickEvent(TickEvent.ClientTickEvent event) {
+        if (TOGGLE_KEY.isPressed()) {
+            enabled = !enabled;
+        }
     }
 
     @SubscribeEvent
@@ -50,59 +61,77 @@ public class Raytracer {
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
             displayWidth = mc.displayWidth;
             displayHeight = mc.displayHeight;
-            //System.out.println("Resize event!");
+            System.out.println(String.format("Resize: %d %d", displayWidth, displayHeight));
             texture = resize(displayWidth, displayHeight);
-            sr = new ScaledResolution(this.mc);
+
+            textureWidth = (float)Math.pow(2.0, Math.ceil(Math.log((double) displayWidth) / Math.log(2.0)));
+            textureHeight = (float)Math.pow(2.0, Math.ceil(Math.log((double) displayHeight) / Math.log(2.0)));
+        }
+    }
+
+    @SubscribeEvent
+    public void onPreDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Pre event) {
+        if (enabled) {
+            restoreTheWorld();
+        }
+    }
+
+    @SubscribeEvent
+    public void onPostDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Post event) {
+        if (enabled) {
+            takeOverTheWorld();
         }
     }
 
     @SubscribeEvent
     public void render(TickEvent.RenderTickEvent event) {
+        if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
             // Run raytracer
             raytrace();
 
             GlStateManager.bindTexture(texture);
 
-            double height = sr.getScaledHeight_double();
-            double width = sr.getScaledWidth_double();
-            if (width > height) {
-                width *= (width / height);
-            } else {
-                height *= (height / width);
-            }
-
-            Tessellator tessellator = Tessellator.getInstance();
-            VertexBuffer vertexbuffer = tessellator.getBuffer();
+            GL11.glViewport(0, 0, displayWidth, displayHeight);
             GlStateManager.enableBlend();
-            GlStateManager.tryBlendFuncSeparate(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
-            vertexbuffer.begin(7, DefaultVertexFormats.POSITION_TEX);
-            vertexbuffer.pos(0.0, height, 0.0).tex(0.0, 0.0).endVertex();
-            vertexbuffer.pos(width, height, 0.0).tex(1.0, 0.0).endVertex();
-            vertexbuffer.pos(width, 0.0, 0.0).tex(1.0, 1.0).endVertex();
-            vertexbuffer.pos(0.0, 0.0, 0.0).tex(0.0, 1.0).endVertex();
-            tessellator.draw();
-            GlStateManager.disableBlend();
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPushMatrix();
+            GL11.glLoadIdentity();
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPushMatrix();
+            GL11.glLoadIdentity();
+            GL11.glOrtho(0.0, (double) displayWidth, (double) displayHeight, 0.0, -1.0, 1.0);
+            GL11.glBegin(GL11.GL_QUADS);
 
-            GlStateManager.pushMatrix();
-            String splashText = "Hello world!";
-            mc.fontRendererObj.drawString(splashText, 0, 1, -256);
-            GlStateManager.popMatrix();
+            GL11.glTexCoord2f(0.0f, 0.0f); GL11.glVertex2f(0.0f, textureHeight);
+            GL11.glTexCoord2f(1.0f, 0.0f); GL11.glVertex2f(textureWidth, textureHeight);
+            GL11.glTexCoord2f(1.0f, 1.0f); GL11.glVertex2f(textureWidth, 0.0f);
+            GL11.glTexCoord2f(0.0f, 1.0f); GL11.glVertex2f(0.0f, 0.0f);
+
+            GL11.glEnd();
+            GL11.glPopMatrix();
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopMatrix();
 
             // Render overlay (Inventory, Menu)
             renderGameOverlay(event.renderTickTime);
 
-            // Save the WorldClient
-            wc = mc.theWorld;
-            mc.theWorld = null;
+            takeOverTheWorld();
         } else if (event.phase == TickEvent.Phase.END) {
-            // Restore the WorldClient
-            mc.theWorld = wc;
-            wc = null;
+            restoreTheWorld();
         }
     }
 
-    // TODO: Overlays currently have dirt background instead of the game
+    private void takeOverTheWorld() {
+        wc = mc.theWorld;
+        mc.theWorld = null;
+    }
+
+    private void restoreTheWorld() {
+        mc.theWorld = wc;
+        wc = null;
+    }
+
     private void renderGameOverlay(float renderTickTime) {
         mc.mcProfiler.endStartSection("gui");
 
