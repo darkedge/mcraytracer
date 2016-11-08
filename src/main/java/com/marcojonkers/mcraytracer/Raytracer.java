@@ -1,17 +1,21 @@
 package com.marcojonkers.mcraytracer;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.VertexBuffer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.math.MathHelper;
+import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.lwjgl.opengl.GL11;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
@@ -22,46 +26,68 @@ public class Raytracer {
     private Minecraft mc;
     private WorldClient wc;
 
+    private int displayWidth;
+    private int displayHeight;
+    private int texture;
+    private ScaledResolution sr;
+
     public static final String MODID = "mj_raytracer";
     public static final String VERSION = "1.0";
 
-    private native void renderJNI();
+    private native void init();
+    private native int resize(int width, int height);
+    private native void raytrace();
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
-        this.mc = Minecraft.getMinecraft();
+        mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
+        init();
+    }
+
+    @SubscribeEvent
+    public void resize(GuiScreenEvent.InitGuiEvent.Pre event) {
+        if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
+            displayWidth = mc.displayWidth;
+            displayHeight = mc.displayHeight;
+            //System.out.println("Resize event!");
+            texture = resize(displayWidth, displayHeight);
+            sr = new ScaledResolution(this.mc);
+        }
     }
 
     @SubscribeEvent
     public void render(TickEvent.RenderTickEvent event) {
         if (event.phase == TickEvent.Phase.START) {
-            // TODO: Remove this when raytracer works
-            GlStateManager.clear(16640);
+            // Run raytracer
+            raytrace();
 
-            // Obtain texture
-            renderJNI();
+            GlStateManager.bindTexture(texture);
 
-            GlStateManager.bindTexture(0);
-
-            // Test quad using GL11
-            double height = (double) Minecraft.getMinecraft().displayHeight;
-            double width = (double) Minecraft.getMinecraft().displayWidth;
+            double height = sr.getScaledHeight_double();
+            double width = sr.getScaledWidth_double();
+            if (width > height) {
+                width *= (width / height);
+            } else {
+                height *= (height / width);
+            }
 
             Tessellator tessellator = Tessellator.getInstance();
             VertexBuffer vertexbuffer = tessellator.getBuffer();
             GlStateManager.enableBlend();
-            GlStateManager.disableTexture2D();
             GlStateManager.tryBlendFuncSeparate(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
-            GlStateManager.color(1.0f, 0.0f, 0.0f, 1.0f);
-            vertexbuffer.begin(7, DefaultVertexFormats.POSITION);
-            vertexbuffer.pos(0.0, height, 0.0D).endVertex();
-            vertexbuffer.pos(width, height, 0.0D).endVertex();
-            vertexbuffer.pos(width, 0.0, 0.0D).endVertex();
-            vertexbuffer.pos(0.0, 0.0, 0.0D).endVertex();
+            vertexbuffer.begin(7, DefaultVertexFormats.POSITION_TEX);
+            vertexbuffer.pos(0.0, height, 0.0).tex(0.0, 0.0).endVertex();
+            vertexbuffer.pos(width, height, 0.0).tex(1.0, 0.0).endVertex();
+            vertexbuffer.pos(width, 0.0, 0.0).tex(1.0, 1.0).endVertex();
+            vertexbuffer.pos(0.0, 0.0, 0.0).tex(0.0, 1.0).endVertex();
             tessellator.draw();
-            GlStateManager.enableTexture2D();
             GlStateManager.disableBlend();
+
+            GlStateManager.pushMatrix();
+            String splashText = "Hello world!";
+            mc.fontRendererObj.drawString(splashText, 0, 1, -256);
+            GlStateManager.popMatrix();
 
             // Render overlay (Inventory, Menu)
             renderGameOverlay(event.renderTickTime);
@@ -78,16 +104,16 @@ public class Raytracer {
 
     // TODO: Overlays currently have dirt background instead of the game
     private void renderGameOverlay(float renderTickTime) {
-        this.mc.mcProfiler.endStartSection("gui");
+        mc.mcProfiler.endStartSection("gui");
 
-        if (this.mc.thePlayer != null) {
-            if (!this.mc.gameSettings.hideGUI || this.mc.currentScreen != null)
+        if (mc.thePlayer != null) {
+            if (!mc.gameSettings.hideGUI || mc.currentScreen != null)
             {
                 GlStateManager.alphaFunc(516, 0.1F);
-                this.mc.ingameGUI.renderGameOverlay(renderTickTime);
+                mc.ingameGUI.renderGameOverlay(renderTickTime);
             }
         }
 
-        this.mc.mcProfiler.endSection();
+        mc.mcProfiler.endSection();
     }
 }

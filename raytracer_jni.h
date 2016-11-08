@@ -9,10 +9,26 @@ extern "C" {
 #endif
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
- * Method:    renderJNI
+ * Method:    init
  * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_renderJNI
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    resize
+ * Signature: (II)I
+ */
+JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
+  (JNIEnv *, jobject, jint, jint);
+
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    raytrace
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
   (JNIEnv *, jobject);
 
 #ifdef __cplusplus
