@@ -18,17 +18,17 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
  * Method:    resize
- * Signature: (II)I
+ * Signature: (II)V
  */
-JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
   (JNIEnv *, jobject, jint, jint);
 
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
  * Method:    raytrace
- * Signature: ()V
+ * Signature: ()I
  */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
+JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
   (JNIEnv *, jobject);
 
 #ifdef __cplusplus

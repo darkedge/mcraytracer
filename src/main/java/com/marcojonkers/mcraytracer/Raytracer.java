@@ -18,7 +18,7 @@ import org.lwjgl.opengl.GL11;
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
     static {
-        System.loadLibrary("raytracer_native");
+        System.loadLibrary("loader");
     }
 
     private Minecraft mc;
@@ -26,7 +26,6 @@ public class Raytracer {
 
     private int displayWidth;
     private int displayHeight;
-    private int texture;
 
     private float textureWidth;
     private float textureHeight;
@@ -36,9 +35,10 @@ public class Raytracer {
     public static final String VERSION = "1.0";
     private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, "test");
 
+    // C++ functions
     private native void init();
-    private native int resize(int width, int height);
-    private native void raytrace();
+    private native void resize(int width, int height);
+    private native int raytrace();
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
@@ -62,7 +62,7 @@ public class Raytracer {
             displayWidth = mc.displayWidth;
             displayHeight = mc.displayHeight;
             System.out.println(String.format("Resize: %d %d", displayWidth, displayHeight));
-            texture = resize(displayWidth, displayHeight);
+            resize(displayWidth, displayHeight);
 
             textureWidth = (float)Math.pow(2.0, Math.ceil(Math.log((double) displayWidth) / Math.log(2.0)));
             textureHeight = (float)Math.pow(2.0, Math.ceil(Math.log((double) displayHeight) / Math.log(2.0)));
@@ -88,7 +88,7 @@ public class Raytracer {
         if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
             // Run raytracer
-            raytrace();
+            int texture = raytrace();
 
             GlStateManager.bindTexture(texture);
 

@@ -3,8 +3,8 @@
 #include <cuda_runtime_api.h>
 #include <string>
 
-void Raytrace(JNIEnv* env, cudaGraphicsResource_t dst, int texHeight);
-void Resize(JNIEnv* env, int w, int h);
+void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t dst, int texHeight);
+void rtResize(JNIEnv* env, int w, int h);
 
 static void Log(JNIEnv* env, const std::string& stdstr) {
 	jclass syscls = env->FindClass("java/lang/System");

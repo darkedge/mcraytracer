@@ -8,7 +8,6 @@
 #include <string>
 
 #include "raytracer.h"
-#include "raytracer_jni.h"
 
 static jint width;
 static jint height;
@@ -18,13 +17,39 @@ static GLint texHeight;
 static GLuint texture;
 static cudaGraphicsResource_t gfxResource;
 
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init(JNIEnv* env, jobject) {
+#define MJ_EXPORT __declspec(dllexport)
+
+extern "C" {
+	MJ_EXPORT void Init(JNIEnv*);
+	MJ_EXPORT void Destroy(JNIEnv*);
+	MJ_EXPORT void Resize(JNIEnv*, jint, jint);
+	MJ_EXPORT jint Raytrace(JNIEnv*);
+}
+
+void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
         Log(env, "Could not load OpenGL functions!");
     }
 }
 
-JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize(JNIEnv* env, jobject, jint screenWidth, jint screenHeight) {
+void Destroy(JNIEnv* env) {
+	// Unregister CUDA resource
+	if (gfxResource) {
+		cudaError_t err = cudaGraphicsUnregisterResource(gfxResource);
+		if (err != cudaSuccess) {
+			Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err));
+		}
+		gfxResource = 0;
+	}
+
+	if (texture) {
+		glDeleteTextures(1, &texture);
+		texture = 0;
+	}
+}
+
+// Returns a OpenGL texture handle
+void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     // Assume the size is different (already checked in java)
     width = screenWidth;
     height = screenHeight;
@@ -78,13 +103,13 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize(JNIEnv
     }
 
     // CUDA does not need to know the texture width
-    Resize(env, screenWidth, screenHeight);
-
-    return texture;
+    rtResize(env, screenWidth, screenHeight);
 }
 
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace(JNIEnv* env, jobject) {
+jint Raytrace(JNIEnv* env) {
     assert(texture);
 
-    Raytrace(env, gfxResource, texHeight);
+    rtRaytrace(env, gfxResource, texHeight);
+
+	return texture;
 }

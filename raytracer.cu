@@ -22,7 +22,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch) {
     *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 255.0f, v * 255.0f, 255.0f, 255.0f);
 }
 
-void Resize(JNIEnv* env, int screenWidth, int screenHeight) {
+void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     g_screenWidth = screenWidth;
     g_screenHeight = screenHeight;
 
@@ -49,7 +49,7 @@ void Resize(JNIEnv* env, int screenWidth, int screenHeight) {
     }
 }
 
-void Raytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
