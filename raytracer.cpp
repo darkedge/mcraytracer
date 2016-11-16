@@ -8,6 +8,7 @@
 #include <string>
 
 #include "raytracer.h"
+#include "jni_shared.h"
 
 static jint width;
 static jint height;
@@ -18,6 +19,13 @@ static GLuint texture;
 static cudaGraphicsResource_t gfxResource;
 
 #define MJ_EXPORT __declspec(dllexport)
+
+/*
+	"For optimal performance, however, a thread should pass the JNIEnv that it
+	received when it was invoked down through the methods it calls, because
+	looking it up can require significant work."
+	- http://www.ibm.com/developerworks/java/library/j-jni/
+*/
 
 extern "C" {
 	MJ_EXPORT void Init(JNIEnv*);
@@ -30,6 +38,7 @@ void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
         Log(env, "Could not load OpenGL functions!");
     }
+	CacheJNI(env);
 }
 
 void Destroy(JNIEnv* env) {
@@ -54,7 +63,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     width = screenWidth;
     height = screenHeight;
 
-    // power of two check
+    // Round up to nearest power of two
     int tw = (int) pow(2, ceil(log(screenWidth) / log(2)));
     int th = (int) pow(2, ceil(log(screenHeight) / log(2)));
 
@@ -113,3 +122,5 @@ jint Raytrace(JNIEnv* env) {
 
 	return texture;
 }
+
+#include "jni_shared.inl"

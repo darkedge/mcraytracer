@@ -3,10 +3,12 @@
 // - Load temp DLL and symbols
 // - Pass JNI function calls to temp DLL
 // - Load temp DLL if raytracer_native.dll changed
-
-#include <windows.h>
-#include "loader_jni.h"
 #include <string>
+#include <cassert>
+#include <windows.h>
+
+#include "loader_jni.h"
+#include "jni_shared.h"
 
 #define RT_INIT(name) void name(JNIEnv*)
 typedef RT_INIT(InitFunc);
@@ -37,16 +39,6 @@ static LARGE_INTEGER g_lastLoadTime;
 static Raytracer g_raytracer;
 static jint g_width;
 static jint g_height;
-
-inline void Log(JNIEnv* env, const std::string& stdstr) {
-	jclass syscls = env->FindClass("java/lang/System");
-	jfieldID fid = env->GetStaticFieldID(syscls, "out", "Ljava/io/PrintStream;");
-	jobject out = env->GetStaticObjectField(syscls, fid);
-	jclass pscls = env->FindClass("java/io/PrintStream");
-	jmethodID mid = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
-	jstring str = env->NewStringUTF(stdstr.c_str());
-	env->CallVoidMethod(out, mid, str);
-}
 
 inline FILETIME mjGetLastWriteTime(char *filename) {
 	FILETIME lastWriteTime = {};
@@ -131,6 +123,7 @@ static bool ReloadIfNecessary(JNIEnv* env) {
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init
 (JNIEnv* env, jobject) {
+	CacheJNI(env);
 	ReloadIfNecessary(env);
 	//g_raytracer.Init(); // Redundant
 }
@@ -152,3 +145,5 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
 	}
 	return g_raytracer.Raytrace(env);
 }
+
+#include "jni_shared.inl"

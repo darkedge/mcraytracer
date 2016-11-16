@@ -1,11 +1,17 @@
 package com.marcojonkers.mcraytracer;
 
+import net.minecraft.block.Block;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
@@ -57,6 +63,35 @@ public class Raytracer {
     }
 
     @SubscribeEvent
+    public void onSaveChunkEvent(ChunkEvent.Save event) {
+        //System.out.println("Save Event!");
+        //event.getChunk();
+    }
+
+    @SubscribeEvent
+    public void onLoadSaveEvent(ChunkEvent.Load event) {
+        Chunk chunk = event.getChunk();
+        System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
+
+        ExtendedBlockStorage[] array = chunk.getBlockStorageArray();
+        for (int i = 0; i < 16; i++) {
+            ExtendedBlockStorage section = array[i];
+            if (section.isEmpty()) continue;
+            IBlockState iblockstate = section.get(0,0,0);
+            Block block = iblockstate.getBlock();
+        }
+    }
+
+    @SubscribeEvent
+    public void onLoadWorldEvent(WorldEvent.Load event) {
+        System.out.println("World Load Event!");
+    }
+
+    /**
+     * Resize the OpenGL/CUDA resources
+     * @param event
+     */
+    @SubscribeEvent
     public void resize(GuiScreenEvent.InitGuiEvent.Pre event) {
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
             displayWidth = mc.displayWidth;
@@ -69,6 +104,10 @@ public class Raytracer {
         }
     }
 
+    /**
+     * Needed to prevent GUI screens showing the default dirt background
+     * @param event
+     */
     @SubscribeEvent
     public void onPreDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Pre event) {
         if (enabled) {
@@ -76,6 +115,10 @@ public class Raytracer {
         }
     }
 
+    /**
+     * Needed to prevent GUI screens showing the default dirt background
+     * @param event
+     */
     @SubscribeEvent
     public void onPostDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (enabled) {
@@ -92,7 +135,6 @@ public class Raytracer {
 
             GlStateManager.bindTexture(texture);
 
-            GL11.glViewport(0, 0, displayWidth, displayHeight);
             GlStateManager.enableBlend();
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glPushMatrix();
