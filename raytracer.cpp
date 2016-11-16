@@ -8,7 +8,7 @@
 #include <string>
 
 #include "raytracer.h"
-#include "jni_shared.h"
+#include <jni.h>
 
 static jint width;
 static jint height;
@@ -32,6 +32,41 @@ extern "C" {
 	MJ_EXPORT void Destroy(JNIEnv*);
 	MJ_EXPORT void Resize(JNIEnv*, jint, jint);
 	MJ_EXPORT jint Raytrace(JNIEnv*);
+	MJ_EXPORT void LoadChunk(JNIEnv*, jobject);
+}
+
+static jobject jni_system_out;
+static jmethodID jni_println;
+static jmethodID jni_ebs_get;
+static jmethodID jni_ibs_getBlock;
+static jmethodID jni_block_getIdFromBlock;
+static jmethodID jni_chunk_getBlockStorageArray;
+
+void CacheJNI(JNIEnv* env) {
+	// System.out.println
+	jclass syscls = env->FindClass("java/lang/System");
+	jfieldID fid = env->GetStaticFieldID(syscls, "out", "Ljava/io/PrintStream;");
+	jni_system_out = env->GetStaticObjectField(syscls, fid);
+	jclass pscls = env->FindClass("java/io/PrintStream");
+	jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
+
+	// Chunk.getBlockStorageArray
+	jclass chunk = env->FindClass("net/minecraft/world/chunk/Chunk");
+	jni_chunk_getBlockStorageArray = env->GetMethodID(chunk, "getBlockStorageArray", "()[Lnet/minecraft/world/chunk/storage/ExtendedBlockStorage;");
+	jclass ebs = env->FindClass("net/minecraft/world/chunk/storage/ExtendedBlockStorage");
+	jni_ebs_get = env->GetMethodID(ebs, "get", "(III)Lnet/minecraft/block/state/IBlockState;");
+	jclass ibs = env->FindClass("net/minecraft/block/state/IBlockState");
+	jni_ibs_getBlock = env->GetMethodID(ibs, "getBlock", "()Lnet/minecraft/block/Block;");
+	jclass block = env->FindClass("net/minecraft/block/Block");
+	jni_block_getIdFromBlock = env->GetStaticMethodID(block, "getIdFromBlock", "(Lnet/minecraft/block/Block;)I");
+}
+
+void Log(JNIEnv* env, const std::string& stdstr) {
+	assert(jni_system_out);
+	assert(jni_println);
+
+	jstring str = env->NewStringUTF(stdstr.c_str());
+	env->CallVoidMethod(jni_system_out, jni_println, str);
 }
 
 void Init(JNIEnv* env) {
@@ -39,9 +74,11 @@ void Init(JNIEnv* env) {
         Log(env, "Could not load OpenGL functions!");
     }
 	CacheJNI(env);
+	Log(env, "Raytracer: Init");
 }
 
 void Destroy(JNIEnv* env) {
+	Log(env, "Raytracer: Destroy");
 	// Unregister CUDA resource
 	if (gfxResource) {
 		cudaError_t err = cudaGraphicsUnregisterResource(gfxResource);
@@ -59,6 +96,7 @@ void Destroy(JNIEnv* env) {
 
 // Returns a OpenGL texture handle
 void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
+	Log(env, "Raytracer: Resize");
     // Assume the size is different (already checked in java)
     width = screenWidth;
     height = screenHeight;
@@ -116,11 +154,38 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
 }
 
 jint Raytrace(JNIEnv* env) {
-    assert(texture);
-
     rtRaytrace(env, gfxResource, texHeight);
 
 	return texture;
 }
 
-#include "jni_shared.inl"
+void LoadChunk(JNIEnv* env, jobject ) { 
+	Log(env, "Raytracer: LoadChunk");
+	/*
+	jclass cls = env->GetObjectClass(obj); 
+
+	// First get the class object
+	jmethodID mid = env->GetMethodID(cls, "getClass", "()Ljava/lang/Class;");
+	jobject clsObj = env->CallObjectMethod(obj, mid);
+
+	// Now get the class object's class descriptor
+	cls = env->GetObjectClass(clsObj);
+
+	// Find the getName() method on the class object
+	mid = env->GetMethodID(cls, "getName", "()Ljava/lang/String;");
+
+	// Call the getName() to get a jstring object back
+	jstring strObj = (jstring)env->CallObjectMethod(clsObj, mid);
+
+	env->CallVoidMethod(jni_system_out, jni_println, strObj);
+	
+
+	//jobjectArray arr = (jobjectArray) env->CallObjectMethod(chunk, jni_chunk_getBlockStorageArray);
+	for (int i = 0; i < 16; i++) {
+		//jobject section = env->GetObjectArrayElement(arr, i);
+		//jobject iblockstate = env->CallObjectMethod(section, jni_ebs_get, 0, 0, 0); // TODO
+		//jobject block = env->CallObjectMethod(iblockstate, jni_ibs_getBlock);
+		//block;
+	}
+	*/
+}

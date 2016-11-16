@@ -45,6 +45,7 @@ public class Raytracer {
     private native void init();
     private native void resize(int width, int height);
     private native int raytrace();
+    private native void loadChunk(Chunk chunk);
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
@@ -70,15 +71,18 @@ public class Raytracer {
 
     @SubscribeEvent
     public void onLoadSaveEvent(ChunkEvent.Load event) {
+        loadChunk(event.getChunk());
         Chunk chunk = event.getChunk();
-        System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
+        //System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
 
         ExtendedBlockStorage[] array = chunk.getBlockStorageArray();
         for (int i = 0; i < 16; i++) {
             ExtendedBlockStorage section = array[i];
-            if (section.isEmpty()) continue;
-            IBlockState iblockstate = section.get(0,0,0);
-            Block block = iblockstate.getBlock();
+            if (section != null) {
+                if (section.isEmpty()) continue;
+                IBlockState iblockstate = section.get(0, 0, 0);
+                Block block = iblockstate.getBlock();
+            }
         }
     }
 
@@ -92,11 +96,10 @@ public class Raytracer {
      * @param event
      */
     @SubscribeEvent
-    public void resize(GuiScreenEvent.InitGuiEvent.Pre event) {
+    public void onPreInitGuiEvent(GuiScreenEvent.InitGuiEvent.Pre event) {
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
             displayWidth = mc.displayWidth;
             displayHeight = mc.displayHeight;
-            System.out.println(String.format("Resize: %d %d", displayWidth, displayHeight));
             resize(displayWidth, displayHeight);
 
             textureWidth = (float)Math.pow(2.0, Math.ceil(Math.log((double) displayWidth) / Math.log(2.0)));

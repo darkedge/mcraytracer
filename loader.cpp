@@ -8,7 +8,13 @@
 #include <windows.h>
 
 #include "loader_jni.h"
-#include "jni_shared.h"
+
+// New functions:
+// - Add #define/typedef pair
+// - Add function pointer to Raytracer struct
+// - Load function in Load() + validness checks
+// - Implement function at bottom of file
+// - Add corresponding function in raytracer.cpp
 
 #define RT_INIT(name) void name(JNIEnv*)
 typedef RT_INIT(InitFunc);
@@ -22,11 +28,15 @@ typedef RT_RESIZE(ResizeFunc);
 #define RT_RAYTRACE(name) jint name(JNIEnv*)
 typedef RT_RAYTRACE(RaytraceFunc);
 
+#define RT_LOAD_CHUNK(name) void name(JNIEnv*, jobject)
+typedef RT_LOAD_CHUNK(LoadChunkFunc);
+
 struct Raytracer {
 	InitFunc* Init;
 	DestroyFunc* Destroy;
 	RaytraceFunc* Raytrace;
 	ResizeFunc* Resize;
+	LoadChunkFunc* LoadChunk;
 
 	FILETIME DLLLastWriteTime;
 	bool valid;
@@ -39,6 +49,26 @@ static LARGE_INTEGER g_lastLoadTime;
 static Raytracer g_raytracer;
 static jint g_width;
 static jint g_height;
+
+static jobject jni_system_out;
+static jmethodID jni_println;
+
+void CacheJNI(JNIEnv* env) {
+	// System.out.println
+	jclass syscls = env->FindClass("java/lang/System");
+	jfieldID fid = env->GetStaticFieldID(syscls, "out", "Ljava/io/PrintStream;");
+	jni_system_out = env->GetStaticObjectField(syscls, fid);
+	jclass pscls = env->FindClass("java/io/PrintStream");
+	jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
+}
+
+void Log(JNIEnv* env, const std::string& stdstr) {
+	assert(jni_system_out);
+	assert(jni_println);
+
+	jstring str = env->NewStringUTF(stdstr.c_str());
+	env->CallVoidMethod(jni_system_out, jni_println, str);
+}
 
 inline FILETIME mjGetLastWriteTime(char *filename) {
 	FILETIME lastWriteTime = {};
@@ -67,15 +97,19 @@ static Raytracer Load(JNIEnv* env) {
 			raytracer.Destroy = (DestroyFunc*)GetProcAddress(raytracer.dll, "Destroy");
 			raytracer.Resize = (ResizeFunc*)GetProcAddress(raytracer.dll, "Resize");
 			raytracer.Raytrace = (RaytraceFunc*)GetProcAddress(raytracer.dll, "Raytrace");
+			raytracer.LoadChunk = (LoadChunkFunc*)GetProcAddress(raytracer.dll, "LoadChunk");
 
 			raytracer.valid = 
 				raytracer.Init &&
 				raytracer.Destroy &&
 				raytracer.Resize &&
-				raytracer.Raytrace;
+				raytracer.Raytrace &&
+				raytracer.LoadChunk;
 
 			if (raytracer.valid) {
 				Log(env, "Successfully (re)loaded Raytracer DLL.");
+			} else {
+				Log(env, "Failed to (re)load Raytracer DLL!");
 			}
 		}
 	}
@@ -86,6 +120,7 @@ static Raytracer Load(JNIEnv* env) {
 		raytracer.Destroy = NULL;
 		raytracer.Resize = NULL;
 		raytracer.Raytrace = NULL;
+		raytracer.LoadChunk = NULL;
 	}
 
 	return raytracer;
@@ -102,6 +137,7 @@ static void Unload(JNIEnv* env) {
 
 // Returns true if the DLL was reloaded.
 static bool ReloadIfNecessary(JNIEnv* env) {
+	Log(env, "Loader: Reload");
 	// Load DLL
 	FILETIME NewDLLWriteTime = mjGetLastWriteTime((char*)g_dllName);
 
@@ -113,6 +149,7 @@ static bool ReloadIfNecessary(JNIEnv* env) {
 		}
 
 		// Reload static memory
+		Log(env, "Loader: Init");
 		g_raytracer.Init(env);
 
 		return true;
@@ -124,12 +161,14 @@ static bool ReloadIfNecessary(JNIEnv* env) {
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init
 (JNIEnv* env, jobject) {
 	CacheJNI(env);
+	Log(env, "Loader: Init");
 	ReloadIfNecessary(env);
 	//g_raytracer.Init(); // Redundant
 }
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
 (JNIEnv* env, jobject, jint width, jint height) {
+	Log(env, "Loader: Resize");
 	ReloadIfNecessary(env);
 	// Cache width and height
 	g_width = width;
@@ -146,4 +185,9 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
 	return g_raytracer.Raytrace(env);
 }
 
-#include "jni_shared.inl"
+// TODO: This is probably called on a different thread -> problem!
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
+(JNIEnv* env, jobject, jobject obj) {
+	Log(env, "Loader: LoadChunk");
+	g_raytracer.LoadChunk(env, obj);
+}

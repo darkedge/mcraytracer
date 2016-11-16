@@ -31,6 +31,14 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
 JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
   (JNIEnv *, jobject);
 
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    loadChunk
+ * Signature: (Lnet/minecraft/world/chunk/Chunk;)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
+  (JNIEnv *, jobject, jobject);
+
 #ifdef __cplusplus
 }
 #endif

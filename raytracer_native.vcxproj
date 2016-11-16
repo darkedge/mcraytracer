@@ -97,14 +97,12 @@
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h" />
     <ClInclude Include="include\KHR\khrplatform.h" />
-    <ClInclude Include="jni_shared.h" />
     <ClInclude Include="raytracer.h" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="raytracer.cu" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="jni_shared.inl" />
     <None Include="loader.vcxproj" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

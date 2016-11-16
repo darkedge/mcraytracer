@@ -116,11 +116,7 @@
     <ClCompile Include="loader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="jni_shared.h" />
     <ClInclude Include="loader_jni.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="jni_shared.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
