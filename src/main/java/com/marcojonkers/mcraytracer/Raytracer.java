@@ -73,7 +73,7 @@ public class Raytracer {
     public void onLoadSaveEvent(ChunkEvent.Load event) {
         loadChunk(event.getChunk());
         Chunk chunk = event.getChunk();
-        //System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
+        System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
 
         ExtendedBlockStorage[] array = chunk.getBlockStorageArray();
         for (int i = 0; i < 16; i++) {

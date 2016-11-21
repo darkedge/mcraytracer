@@ -65,7 +65,7 @@ void Log(JNIEnv* env, const std::string& stdstr) {
 	assert(jni_system_out);
 	assert(jni_println);
 
-	jstring str = env->NewStringUTF(stdstr.c_str());
+	jstring str = env->NewStringUTF((std::string(std::to_string((size_t)env) + ": ") + stdstr).c_str());
 	env->CallVoidMethod(jni_system_out, jni_println, str);
 }
 
