@@ -35,20 +35,23 @@ extern "C" {
 	MJ_EXPORT void LoadChunk(JNIEnv*, jobject);
 }
 
-static jobject jni_system_out;
 static jmethodID jni_println;
 static jmethodID jni_ebs_get;
 static jmethodID jni_ibs_getBlock;
 static jmethodID jni_block_getIdFromBlock;
 static jmethodID jni_chunk_getBlockStorageArray;
+static jclass jni_system;
+static jfieldID jni_system_out_id;
 
 void CacheJNI(JNIEnv* env) {
+#if 0
 	// System.out.println
-	jclass syscls = env->FindClass("java/lang/System");
-	jfieldID fid = env->GetStaticFieldID(syscls, "out", "Ljava/io/PrintStream;");
-	jni_system_out = env->GetStaticObjectField(syscls, fid);
+	jni_system = env->FindClass("java/lang/System");
+	jni_system_out_id = env->GetStaticFieldID(jni_system, "out", "Ljava/io/PrintStream;");
+	
 	jclass pscls = env->FindClass("java/io/PrintStream");
 	jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
+#endif
 
 	// Chunk.getBlockStorageArray
 	jclass chunk = env->FindClass("net/minecraft/world/chunk/Chunk");
@@ -62,11 +65,26 @@ void CacheJNI(JNIEnv* env) {
 }
 
 void Log(JNIEnv* env, const std::string& stdstr) {
-	assert(jni_system_out);
+#if 0
 	assert(jni_println);
+
+	// For some reason we cannot cache this field
+	jobject jni_system_out = env->GetStaticObjectField(jni_system, jni_system_out_id);
 
 	jstring str = env->NewStringUTF((std::string(std::to_string((size_t)env) + ": ") + stdstr).c_str());
 	env->CallVoidMethod(jni_system_out, jni_println, str);
+#endif
+
+	jclass logmanager = env->FindClass("org/apache/logging/log4j/LogManager");
+	jmethodID getLogger = env->GetStaticMethodID(logmanager, "getLogger", "(Ljava/lang/String;)Lorg/apache/logging/log4j/Logger;");
+	jclass loggerC = env->FindClass("org/apache/logging/log4j/Logger");
+	jmethodID jni_info = env->GetMethodID(loggerC, "info", "(Ljava/lang/String;)V");
+	jstring logstr = env->NewStringUTF("native_raytracer");
+	jobject jni_logger = env->CallStaticObjectMethod(logmanager, getLogger, logstr);
+
+	// Prepend JNIEnv pointer value to message
+	jstring str = env->NewStringUTF((std::string(std::to_string((size_t)env) + ": ") + stdstr).c_str());
+	env->CallVoidMethod(jni_logger, jni_info, str);
 }
 
 void Init(JNIEnv* env) {
@@ -74,11 +92,11 @@ void Init(JNIEnv* env) {
         Log(env, "Could not load OpenGL functions!");
     }
 	CacheJNI(env);
-	Log(env, "Raytracer: Init");
+	Log(env, "Init");
 }
 
 void Destroy(JNIEnv* env) {
-	Log(env, "Raytracer: Destroy");
+	Log(env, "Destroy");
 	// Unregister CUDA resource
 	if (gfxResource) {
 		cudaError_t err = cudaGraphicsUnregisterResource(gfxResource);
@@ -96,7 +114,7 @@ void Destroy(JNIEnv* env) {
 
 // Returns a OpenGL texture handle
 void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
-	Log(env, "Raytracer: Resize");
+	Log(env, "Resize");
     // Assume the size is different (already checked in java)
     width = screenWidth;
     height = screenHeight;
@@ -160,7 +178,7 @@ jint Raytrace(JNIEnv* env) {
 }
 
 void LoadChunk(JNIEnv* env, jobject ) { 
-	Log(env, "Raytracer: LoadChunk");
+	Log(env, "LoadChunk");
 	/*
 	jclass cls = env->GetObjectClass(obj); 
 

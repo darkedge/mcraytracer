@@ -18,6 +18,8 @@ import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 
@@ -38,6 +40,7 @@ public class Raytracer {
     private boolean enabled = true;
 
     public static final String MODID = "mj_raytracer";
+    private static final Logger LOGGER = LogManager.getLogger(MODID);
     public static final String VERSION = "1.0";
     private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, "test");
 
@@ -73,7 +76,7 @@ public class Raytracer {
     public void onLoadSaveEvent(ChunkEvent.Load event) {
         loadChunk(event.getChunk());
         Chunk chunk = event.getChunk();
-        System.out.println("Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
+        LOGGER.info("Java: Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
 
         ExtendedBlockStorage[] array = chunk.getBlockStorageArray();
         for (int i = 0; i < 16; i++) {
@@ -88,7 +91,7 @@ public class Raytracer {
 
     @SubscribeEvent
     public void onLoadWorldEvent(WorldEvent.Load event) {
-        System.out.println("World Load Event!");
+        LOGGER.info("Java: World Load Event!");
     }
 
     /**
@@ -97,6 +100,7 @@ public class Raytracer {
      */
     @SubscribeEvent
     public void onPreInitGuiEvent(GuiScreenEvent.InitGuiEvent.Pre event) {
+        LOGGER.info("Java: Resize");
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
             displayWidth = mc.displayWidth;
             displayHeight = mc.displayHeight;
@@ -181,8 +185,7 @@ public class Raytracer {
         mc.mcProfiler.endStartSection("gui");
 
         if (mc.thePlayer != null) {
-            if (!mc.gameSettings.hideGUI || mc.currentScreen != null)
-            {
+            if (!mc.gameSettings.hideGUI || mc.currentScreen != null) {
                 GlStateManager.alphaFunc(516, 0.1F);
                 mc.ingameGUI.renderGameOverlay(renderTickTime);
             }

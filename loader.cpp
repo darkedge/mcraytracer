@@ -50,25 +50,30 @@ static Raytracer g_raytracer;
 static jint g_width;
 static jint g_height;
 
-static jobject jni_system_out;
-static jmethodID jni_println;
-
-void CacheJNI(JNIEnv* env) {
-	// System.out.println
-	jclass syscls = env->FindClass("java/lang/System");
-	jfieldID fid = env->GetStaticFieldID(syscls, "out", "Ljava/io/PrintStream;");
-	jni_system_out = env->GetStaticObjectField(syscls, fid);
-	jclass pscls = env->FindClass("java/io/PrintStream");
-	jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
-}
-
 void Log(JNIEnv* env, const std::string& stdstr) {
-	assert(jni_system_out);
-	assert(jni_println);
+	jclass logmanager = env->FindClass("org/apache/logging/log4j/LogManager");
+	jmethodID getLogger = env->GetStaticMethodID(logmanager, "getLogger", "(Ljava/lang/String;)Lorg/apache/logging/log4j/Logger;");
+	jclass loggerC = env->FindClass("org/apache/logging/log4j/Logger");
+	jmethodID jni_info = env->GetMethodID(loggerC, "info", "(Ljava/lang/String;)V");
+	jstring logstr = env->NewStringUTF("native_loader");
+	jobject jni_logger = env->CallStaticObjectMethod(logmanager, getLogger, logstr);
 
+	// Prepend JNIEnv pointer value to message
 	jstring str = env->NewStringUTF((std::string(std::to_string((size_t)env) + ": ") + stdstr).c_str());
-	env->CallVoidMethod(jni_system_out, jni_println, str);
+	env->CallVoidMethod(jni_logger, jni_info, str);
 }
+
+#if 0 // stuff seems to change while loading, unreliable, crashes
+void CacheJNI(JNIEnv* env) {
+	// Logging
+	jclass logmanager = env->FindClass("org/apache/logging/log4j/LogManager");
+	jmethodID getLogger = env->GetStaticMethodID(logmanager, "getLogger", "()Lorg/apache/logging/log4j/Logger;");
+	jclass loggerC = env->FindClass("org/apache/logging/log4j/Logger");
+	jni_info = env->GetMethodID(loggerC, "info", "(Ljava/lang/String;)V");
+	jni_logger = env->CallStaticObjectMethod(logmanager, getLogger);
+	Log(env, "Successfully cached JNI functions");
+}
+#endif
 
 inline FILETIME mjGetLastWriteTime(char *filename) {
 	FILETIME lastWriteTime = {};
@@ -137,7 +142,6 @@ static void Unload(JNIEnv* env) {
 
 // Returns true if the DLL was reloaded.
 static bool ReloadIfNecessary(JNIEnv* env) {
-	Log(env, "Loader: Reload");
 	// Load DLL
 	FILETIME NewDLLWriteTime = mjGetLastWriteTime((char*)g_dllName);
 
@@ -149,7 +153,7 @@ static bool ReloadIfNecessary(JNIEnv* env) {
 		}
 
 		// Reload static memory
-		Log(env, "Loader: Calling Raytracer::Init");
+		Log(env, "Calling Raytracer::Init");
 		g_raytracer.Init(env);
 
 		return true;
@@ -160,15 +164,15 @@ static bool ReloadIfNecessary(JNIEnv* env) {
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_init
 (JNIEnv* env, jobject) {
-	CacheJNI(env);
-	Log(env, "Loader: Init");
+	//CacheJNI(env);
+	Log(env, "Init");
 	ReloadIfNecessary(env);
 	//g_raytracer.Init(); // Redundant
 }
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_resize
 (JNIEnv* env, jobject, jint width, jint height) {
-	Log(env, "Loader: Resize");
+	Log(env, "Resize");
 	ReloadIfNecessary(env);
 	// Cache width and height
 	g_width = width;
@@ -188,6 +192,6 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
 // TODO: This is probably called on a different thread -> problem!
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
 (JNIEnv* env, jobject, jobject obj) {
-	Log(env, "Loader: LoadChunk");
+	Log(env, "LoadChunk");
 	g_raytracer.LoadChunk(env, obj);
 }
