@@ -42,7 +42,7 @@ public class Raytracer {
     public static final String MODID = "mj_raytracer";
     private static final Logger LOGGER = LogManager.getLogger(MODID);
     public static final String VERSION = "1.0";
-    private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, "test");
+    private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, MODID);
 
     // C++ functions
     private native void init();
@@ -134,12 +134,15 @@ public class Raytracer {
     }
 
     @SubscribeEvent
-    public void render(TickEvent.RenderTickEvent event) {
+    public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
             // Run raytracer
             int texture = raytrace();
 
+            //this.mc.renderGlobal.
+
+            // Draw result to screen
             GlStateManager.bindTexture(texture);
 
             GlStateManager.enableBlend();
@@ -182,7 +185,7 @@ public class Raytracer {
     }
 
     private void renderGameOverlay(float renderTickTime) {
-        mc.mcProfiler.endStartSection("gui");
+        mc.mcProfiler.startSection("gui");
 
         if (mc.thePlayer != null) {
             if (!mc.gameSettings.hideGUI || mc.currentScreen != null) {
