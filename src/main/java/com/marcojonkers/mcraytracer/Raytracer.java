@@ -1,17 +1,18 @@
 package com.marcojonkers.mcraytracer;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiVideoSettings;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Matrix4f;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
+import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.world.ChunkEvent;
-import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
@@ -22,6 +23,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.util.glu.Project;
+import org.lwjgl.util.vector.Vector3f;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
@@ -72,8 +80,9 @@ public class Raytracer {
      */
     @SubscribeEvent
     public void onPreInitGuiEvent(GuiScreenEvent.InitGuiEvent.Pre event) {
-        LOGGER.info("Java: Resize");
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
+            LOGGER.info("Java: Resize");
+
             displayWidth = mc.displayWidth;
             displayHeight = mc.displayHeight;
             resize(displayWidth, displayHeight);
@@ -105,8 +114,106 @@ public class Raytracer {
         }
     }
 
-    private void test() {
+    public Vector3f getViewVector(Entity entityIn, double partialTicks) {
+        float f = (float)((double)entityIn.prevRotationPitch + (double)(entityIn.rotationPitch - entityIn.prevRotationPitch) * partialTicks);
+        float f1 = (float)((double)entityIn.prevRotationYaw + (double)(entityIn.rotationYaw - entityIn.prevRotationYaw) * partialTicks);
 
+        if (Minecraft.getMinecraft().gameSettings.thirdPersonView == 2) {
+            f += 180.0F;
+        }
+
+        float f2 = MathHelper.cos(-f1 * 0.017453292F - (float)Math.PI);
+        float f3 = MathHelper.sin(-f1 * 0.017453292F - (float)Math.PI);
+        float f4 = -MathHelper.cos(-f * 0.017453292F);
+        float f5 = MathHelper.sin(-f * 0.017453292F);
+        return new Vector3f(f3 * f4, f5, f2 * f4);
+    }
+
+    private Matrix4f glhFrustumf2(float left, float right, float bottom, float top, float znear, float zfar) {
+        float temp = 2.0f * znear;
+        float temp2 = right - left;
+        float temp3 = top - bottom;
+        float temp4 = zfar - znear;
+
+        return new Matrix4f(new float[]{
+                temp / temp2,
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f,
+                temp / temp3,
+                0.0f,
+                0.0f,
+                (right + left) / temp2,
+                (top + bottom) / temp3,
+                (-zfar - znear) / temp4,
+                -1.0f,
+                0.0f,
+                0.0f,
+                (-temp * zfar) / temp4,
+                0.0f
+        });
+    }
+
+    private Matrix4f glhPerspectivef2(float fovy, float aspect, float znear, float zfar) {
+        float ymax, xmax;
+        ymax = znear * (float) Math.tan(fovy * Math.PI / 360.0);
+        xmax = ymax * aspect;
+        return glhFrustumf2(-xmax, xmax, -ymax, ymax, znear, zfar);
+    }
+
+    private void updateCameraAndRender() {
+        // Set camera
+        Entity entity = this.mc.getRenderViewEntity();
+        if (entity == null) return;
+        float partialTicks = this.mc.getRenderPartialTicks();
+
+        float fov = this.mc.gameSettings.fovSetting;
+
+        // Build projection matrix
+
+        /** TODO: Camera Zoom
+        if (this.cameraZoom != 1.0D)
+        {
+            GlStateManager.translate((float)this.cameraYaw, (float)(-this.cameraPitch), 0.0F);
+            GlStateManager.scale(this.cameraZoom, this.cameraZoom, 1.0D);
+        }
+         */
+
+        float farPlaneDistance = (float)(this.mc.gameSettings.renderDistanceChunks * 16);
+        Matrix4f projection = glhPerspectivef2(fov, (float)this.mc.displayWidth / (float)this.mc.displayHeight, 0.05F, farPlaneDistance * MathHelper.SQRT_2);
+
+        // Build view matrix
+
+        // TODO: Lots of stuff (bobbing, portal, hurting, sleeping, 3rd person, etc etc)
+        // EntityRenderer::orientCamera()
+        // TODO: Get rid of allocations?
+        Matrix4f view = new Matrix4f();
+        view.setIdentity();
+        view.translate(new Vector3f(0.0f, 0.0f, 0.05f));
+
+        float yaw = entity.prevRotationYaw + (entity.rotationYaw - entity.prevRotationYaw) * partialTicks + 180.0F;
+        float pitch = entity.prevRotationPitch + (entity.rotationPitch - entity.prevRotationPitch) * partialTicks;
+
+        view.rotate(pitch, new Vector3f(1.0f, 0.0f, 0.0f));
+        view.rotate(yaw, new Vector3f(0.0f, 1.0f, 0.0f));
+        view.translate(new Vector3f(0.0f, -entity.getEyeHeight(), 0.0f));
+
+        FloatBuffer modelMatrix = FloatBuffer.allocate(16);
+        view.store(modelMatrix); modelMatrix.position(0);
+        FloatBuffer projMatrix = FloatBuffer.allocate(16);
+        projection.store(projMatrix); projMatrix.position(0);
+        IntBuffer viewport = IntBuffer.allocate(4);
+        viewport.put(new int[]{0, 0, this.displayWidth, this.displayHeight}); viewport.position(0);
+        FloatBuffer obj_pos = ByteBuffer.allocateDirect(9 * 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .asFloatBuffer();
+        // gluUnProject does not advance any buffer positions
+        Project.gluUnProject(0.0f, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
+        Project.gluUnProject(this.displayWidth, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
+        Project.gluUnProject(0.0f, displayHeight, 0.0f, modelMatrix, projMatrix, viewport, obj_pos);
+        // TODO: Calculate ray origin (C++, pass fov)
+        // TODO: http://stackoverflow.com/questions/34168791/ndk-work-with-floatbuffer-as-parameter
     }
 
     /**
@@ -125,7 +232,7 @@ public class Raytracer {
     public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
-            test();
+            this.updateCameraAndRender();
 
             // Run raytracer
             int texture = raytrace();
