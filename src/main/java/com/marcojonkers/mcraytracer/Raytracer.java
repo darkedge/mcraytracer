@@ -66,34 +66,6 @@ public class Raytracer {
         }
     }
 
-    @SubscribeEvent
-    public void onSaveChunkEvent(ChunkEvent.Save event) {
-        //System.out.println("Save Event!");
-        //event.getChunk();
-    }
-
-    @SubscribeEvent
-    public void onLoadSaveEvent(ChunkEvent.Load event) {
-        loadChunk(event.getChunk());
-        Chunk chunk = event.getChunk();
-        LOGGER.info("Java: Load Event! " + Integer.toString(chunk.xPosition) + ", " + Integer.toString(chunk.zPosition));
-
-        ExtendedBlockStorage[] array = chunk.getBlockStorageArray();
-        for (int i = 0; i < 16; i++) {
-            ExtendedBlockStorage section = array[i];
-            if (section != null) {
-                if (section.isEmpty()) continue;
-                IBlockState iblockstate = section.get(0, 0, 0);
-                Block block = iblockstate.getBlock();
-            }
-        }
-    }
-
-    @SubscribeEvent
-    public void onLoadWorldEvent(WorldEvent.Load event) {
-        LOGGER.info("Java: World Load Event!");
-    }
-
     /**
      * Resize the OpenGL/CUDA resources
      * @param event
@@ -133,14 +105,18 @@ public class Raytracer {
         }
     }
 
+    private void test() {
+
+    }
+
     @SubscribeEvent
     public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
+            test();
+
             // Run raytracer
             int texture = raytrace();
-
-            //this.mc.renderGlobal.
 
             // Draw result to screen
             GlStateManager.bindTexture(texture);
