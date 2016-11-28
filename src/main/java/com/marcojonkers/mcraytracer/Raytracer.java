@@ -109,6 +109,18 @@ public class Raytracer {
 
     }
 
+    /**
+     * Replace default video settings screen with custom raytracer options menu
+     * @param event
+     */
+    @SubscribeEvent
+    public void onGuiOpenEvent(GuiOpenEvent event) {
+        GuiScreen gui = event.getGui();
+        if (gui instanceof GuiVideoSettings) {
+            event.setGui(new GuiRaytracerSettings(mc.currentScreen, this.mc.gameSettings));
+        }
+    }
+
     @SubscribeEvent
     public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
