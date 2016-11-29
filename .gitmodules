@@ -1,0 +1,3 @@
+[submodule "sce_vectormath"]
+	path = sce_vectormath
+	url = https://github.com/erwincoumans/sce_vectormath
