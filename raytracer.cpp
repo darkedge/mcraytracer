@@ -10,6 +10,10 @@
 #include "raytracer.h"
 #include <jni.h>
 
+#include <vectormath_aos.h>
+
+using namespace Vectormath::Aos;
+
 static jint width;
 static jint height;
 static GLint texWidth;
@@ -33,6 +37,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void LoadChunk(JNIEnv*, jobject);
+    MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
 }
 
 static jmethodID jni_println;
@@ -206,4 +211,17 @@ void LoadChunk(JNIEnv* env, jobject ) {
         //block;
     }
     */
+}
+
+void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
+    jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
+    Vector3 p0(buffer[0], buffer[1], buffer[2]);
+    Vector3 p1(buffer[3], buffer[4], buffer[5]);
+    Vector3 p2(buffer[6], buffer[7], buffer[8]);
+    Vector3 p0p1 = p1 - p0;
+    Vector3 p0p2 = p2 - p0;
+
+    float originDistance = (length(p0p2) * 0.5f) / tanf(buffer[9] * 0.5f);
+    Vector3 originDir = normalize(cross(p0p1, p0p2));
+    Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
 }

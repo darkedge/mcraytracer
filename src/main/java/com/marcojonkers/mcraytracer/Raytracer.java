@@ -30,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.Arrays;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
@@ -57,6 +58,7 @@ public class Raytracer {
     private native void resize(int width, int height);
     private native int raytrace();
     private native void loadChunk(Chunk chunk);
+    private native void setViewingPlane(FloatBuffer buffer);
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
@@ -172,13 +174,8 @@ public class Raytracer {
 
         // Build projection matrix
 
-        /** TODO: Camera Zoom
-        if (this.cameraZoom != 1.0D)
-        {
-            GlStateManager.translate((float)this.cameraYaw, (float)(-this.cameraPitch), 0.0F);
-            GlStateManager.scale(this.cameraZoom, this.cameraZoom, 1.0D);
-        }
-         */
+        // TODO: Camera zoom
+        // see: EntityRenderer.setupCameraTransform()
 
         float farPlaneDistance = (float)(this.mc.gameSettings.renderDistanceChunks * 16);
         Matrix4f projection = glhPerspectivef2(fov, (float)this.mc.displayWidth / (float)this.mc.displayHeight, 0.05F, farPlaneDistance * MathHelper.SQRT_2);
@@ -186,8 +183,8 @@ public class Raytracer {
         // Build view matrix
 
         // TODO: Lots of stuff (bobbing, portal, hurting, sleeping, 3rd person, etc etc)
-        // EntityRenderer::orientCamera()
-        // TODO: Get rid of allocations?
+        // see: EntityRenderer.orientCamera()
+
         Matrix4f view = new Matrix4f();
         view.setIdentity();
         view.translate(new Vector3f(0.0f, 0.0f, 0.05f));
@@ -205,15 +202,16 @@ public class Raytracer {
         projection.store(projMatrix); projMatrix.position(0);
         IntBuffer viewport = IntBuffer.allocate(4);
         viewport.put(new int[]{0, 0, this.displayWidth, this.displayHeight}); viewport.position(0);
-        FloatBuffer obj_pos = ByteBuffer.allocateDirect(9 * 4)
-                .order(ByteOrder.LITTLE_ENDIAN)
+        FloatBuffer obj_pos = ByteBuffer.allocateDirect(10 * 4)
+                .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
         // gluUnProject does not advance any buffer positions
         Project.gluUnProject(0.0f, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
         Project.gluUnProject(this.displayWidth, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
-        Project.gluUnProject(0.0f, displayHeight, 0.0f, modelMatrix, projMatrix, viewport, obj_pos);
-        // TODO: Calculate ray origin (C++, pass fov)
-        // TODO: http://stackoverflow.com/questions/34168791/ndk-work-with-floatbuffer-as-parameter
+        Project.gluUnProject(0.0f, displayHeight, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
+        obj_pos.put(fov);
+
+        setViewingPlane(obj_pos);
     }
 
     /**

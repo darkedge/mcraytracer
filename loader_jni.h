@@ -39,6 +39,14 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
   (JNIEnv *, jobject, jobject);
 
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    setViewingPlane
+ * Signature: (Ljava/nio/FloatBuffer;)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPlane
+  (JNIEnv *, jobject, jobject);
+
 #ifdef __cplusplus
 }
 #endif

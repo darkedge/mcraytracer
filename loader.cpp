@@ -31,6 +31,9 @@ typedef RT_RAYTRACE(RaytraceFunc);
 #define RT_LOAD_CHUNK(name) void name(JNIEnv*, jobject)
 typedef RT_LOAD_CHUNK(LoadChunkFunc);
 
+#define RT_SET_VIEWING_PLANE(name) void name(JNIEnv*, jobject)
+typedef RT_SET_VIEWING_PLANE(SetViewingPlaneFunc);
+
 
 struct Raytracer {
     InitFunc* Init;
@@ -38,6 +41,7 @@ struct Raytracer {
     RaytraceFunc* Raytrace;
     ResizeFunc* Resize;
     LoadChunkFunc* LoadChunk;
+    SetViewingPlaneFunc* SetViewingPlane;
 
     FILETIME DLLLastWriteTime;
     bool valid;
@@ -104,13 +108,15 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.Resize = (ResizeFunc*)GetProcAddress(raytracer.dll, "Resize");
             raytracer.Raytrace = (RaytraceFunc*)GetProcAddress(raytracer.dll, "Raytrace");
             raytracer.LoadChunk = (LoadChunkFunc*)GetProcAddress(raytracer.dll, "LoadChunk");
+            raytracer.SetViewingPlane = (SetViewingPlaneFunc*)GetProcAddress(raytracer.dll, "SetViewingPlane");
 
             raytracer.valid = 
                 raytracer.Init &&
                 raytracer.Destroy &&
                 raytracer.Resize &&
                 raytracer.Raytrace &&
-                raytracer.LoadChunk;
+                raytracer.LoadChunk &&
+                raytracer.SetViewingPlane;
 
             if (raytracer.valid) {
                 Log(env, "Successfully (re)loaded Raytracer DLL.");
@@ -197,7 +203,8 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
     g_raytracer.LoadChunk(env, obj);
 }
 
+// http://stackoverflow.com/questions/34168791/ndk-work-with-floatbuffer-as-parameter
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPlane
-(JNIEnv* env, jobject input, jobject, jint base, jint size) {
-    jfloat *buffer = (jfloat *)env->GetDirectBufferAddress(input);
+(JNIEnv* env, jobject, jobject arr) {
+    g_raytracer.SetViewingPlane(env, arr);
 }
