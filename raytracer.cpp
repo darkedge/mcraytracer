@@ -36,7 +36,6 @@ extern "C" {
     MJ_EXPORT void Destroy(JNIEnv*);
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
-    MJ_EXPORT void LoadChunk(JNIEnv*, jobject);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
 }
 
@@ -180,37 +179,6 @@ jint Raytrace(JNIEnv* env) {
     rtRaytrace(env, gfxResource, texHeight);
 
     return texture;
-}
-
-void LoadChunk(JNIEnv* env, jobject ) { 
-    Log(env, "LoadChunk");
-    /*
-    jclass cls = env->GetObjectClass(obj); 
-
-    // First get the class object
-    jmethodID mid = env->GetMethodID(cls, "getClass", "()Ljava/lang/Class;");
-    jobject clsObj = env->CallObjectMethod(obj, mid);
-
-    // Now get the class object's class descriptor
-    cls = env->GetObjectClass(clsObj);
-
-    // Find the getName() method on the class object
-    mid = env->GetMethodID(cls, "getName", "()Ljava/lang/String;");
-
-    // Call the getName() to get a jstring object back
-    jstring strObj = (jstring)env->CallObjectMethod(clsObj, mid);
-
-    env->CallVoidMethod(jni_system_out, jni_println, strObj);
-    
-
-    //jobjectArray arr = (jobjectArray) env->CallObjectMethod(chunk, jni_chunk_getBlockStorageArray);
-    for (int i = 0; i < 16; i++) {
-        //jobject section = env->GetObjectArrayElement(arr, i);
-        //jobject iblockstate = env->CallObjectMethod(section, jni_ebs_get, 0, 0, 0); // TODO
-        //jobject block = env->CallObjectMethod(iblockstate, jni_ibs_getBlock);
-        //block;
-    }
-    */
 }
 
 void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {

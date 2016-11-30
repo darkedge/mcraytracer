@@ -28,9 +28,6 @@ typedef RT_RESIZE(ResizeFunc);
 #define RT_RAYTRACE(name) jint name(JNIEnv*)
 typedef RT_RAYTRACE(RaytraceFunc);
 
-#define RT_LOAD_CHUNK(name) void name(JNIEnv*, jobject)
-typedef RT_LOAD_CHUNK(LoadChunkFunc);
-
 #define RT_SET_VIEWING_PLANE(name) void name(JNIEnv*, jobject)
 typedef RT_SET_VIEWING_PLANE(SetViewingPlaneFunc);
 
@@ -40,7 +37,6 @@ struct Raytracer {
     DestroyFunc* Destroy;
     RaytraceFunc* Raytrace;
     ResizeFunc* Resize;
-    LoadChunkFunc* LoadChunk;
     SetViewingPlaneFunc* SetViewingPlane;
 
     FILETIME DLLLastWriteTime;
@@ -107,7 +103,6 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.Destroy = (DestroyFunc*)GetProcAddress(raytracer.dll, "Destroy");
             raytracer.Resize = (ResizeFunc*)GetProcAddress(raytracer.dll, "Resize");
             raytracer.Raytrace = (RaytraceFunc*)GetProcAddress(raytracer.dll, "Raytrace");
-            raytracer.LoadChunk = (LoadChunkFunc*)GetProcAddress(raytracer.dll, "LoadChunk");
             raytracer.SetViewingPlane = (SetViewingPlaneFunc*)GetProcAddress(raytracer.dll, "SetViewingPlane");
 
             raytracer.valid = 
@@ -115,7 +110,6 @@ static Raytracer Load(JNIEnv* env) {
                 raytracer.Destroy &&
                 raytracer.Resize &&
                 raytracer.Raytrace &&
-                raytracer.LoadChunk &&
                 raytracer.SetViewingPlane;
 
             if (raytracer.valid) {
@@ -132,7 +126,7 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.Destroy = NULL;
         raytracer.Resize = NULL;
         raytracer.Raytrace = NULL;
-        raytracer.LoadChunk = NULL;
+		raytracer.SetViewingPlane = NULL;
     }
 
     return raytracer;
@@ -194,13 +188,6 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
         g_raytracer.Resize(env, g_width, g_height);
     }
     return g_raytracer.Raytrace(env);
-}
-
-// TODO: This is probably called on a different thread -> problem!
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_loadChunk
-(JNIEnv* env, jobject, jobject obj) {
-    Log(env, "LoadChunk");
-    g_raytracer.LoadChunk(env, obj);
 }
 
 // http://stackoverflow.com/questions/34168791/ndk-work-with-floatbuffer-as-parameter

@@ -57,7 +57,6 @@ public class Raytracer {
     private native void init();
     private native void resize(int width, int height);
     private native int raytrace();
-    private native void loadChunk(Chunk chunk);
     private native void setViewingPlane(FloatBuffer buffer);
 
     @EventHandler
