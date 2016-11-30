@@ -38,6 +38,8 @@ public class Raytracer {
         System.loadLibrary("loader");
     }
 
+    private Renderer renderer;
+
     private Minecraft mc;
     private WorldClient wc;
 
@@ -54,16 +56,17 @@ public class Raytracer {
     private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, MODID);
 
     // C++ functions
-    private native void init();
-    private native void resize(int width, int height);
-    private native int raytrace();
-    private native void setViewingPlane(FloatBuffer buffer);
+    public native void init();
+    public native void resize(int width, int height);
+    public native int raytrace();
+    public native void setViewingPlane(FloatBuffer buffer);
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
         mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
         ClientRegistry.registerKeyBinding(TOGGLE_KEY);
+        renderer = new Renderer(this);
 
         init();
     }
@@ -100,7 +103,7 @@ public class Raytracer {
     @SubscribeEvent
     public void onPreDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Pre event) {
         if (enabled) {
-            restoreTheWorld();
+            renderer.restoreTheWorld();
         }
     }
 
@@ -111,7 +114,7 @@ public class Raytracer {
     @SubscribeEvent
     public void onPostDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (enabled) {
-            takeOverTheWorld();
+            renderer.takeOverTheWorld();
         }
     }
 
@@ -130,89 +133,6 @@ public class Raytracer {
         return new Vector3f(f3 * f4, f5, f2 * f4);
     }
 
-    private Matrix4f glhFrustumf2(float left, float right, float bottom, float top, float znear, float zfar) {
-        float temp = 2.0f * znear;
-        float temp2 = right - left;
-        float temp3 = top - bottom;
-        float temp4 = zfar - znear;
-
-        return new Matrix4f(new float[]{
-                temp / temp2,
-                0.0f,
-                0.0f,
-                0.0f,
-                0.0f,
-                temp / temp3,
-                0.0f,
-                0.0f,
-                (right + left) / temp2,
-                (top + bottom) / temp3,
-                (-zfar - znear) / temp4,
-                -1.0f,
-                0.0f,
-                0.0f,
-                (-temp * zfar) / temp4,
-                0.0f
-        });
-    }
-
-    private Matrix4f glhPerspectivef2(float fovy, float aspect, float znear, float zfar) {
-        float ymax, xmax;
-        ymax = znear * (float) Math.tan(fovy * Math.PI / 360.0);
-        xmax = ymax * aspect;
-        return glhFrustumf2(-xmax, xmax, -ymax, ymax, znear, zfar);
-    }
-
-    private void updateCameraAndRender() {
-        // Set camera
-        Entity entity = this.mc.getRenderViewEntity();
-        if (entity == null) return;
-        float partialTicks = this.mc.getRenderPartialTicks();
-
-        float fov = this.mc.gameSettings.fovSetting;
-
-        // Build projection matrix
-
-        // TODO: Camera zoom
-        // see: EntityRenderer.setupCameraTransform()
-
-        float farPlaneDistance = (float)(this.mc.gameSettings.renderDistanceChunks * 16);
-        Matrix4f projection = glhPerspectivef2(fov, (float)this.mc.displayWidth / (float)this.mc.displayHeight, 0.05F, farPlaneDistance * MathHelper.SQRT_2);
-
-        // Build view matrix
-
-        // TODO: Lots of stuff (bobbing, portal, hurting, sleeping, 3rd person, etc etc)
-        // see: EntityRenderer.orientCamera()
-
-        Matrix4f view = new Matrix4f();
-        view.setIdentity();
-        view.translate(new Vector3f(0.0f, 0.0f, 0.05f));
-
-        float yaw = entity.prevRotationYaw + (entity.rotationYaw - entity.prevRotationYaw) * partialTicks + 180.0F;
-        float pitch = entity.prevRotationPitch + (entity.rotationPitch - entity.prevRotationPitch) * partialTicks;
-
-        view.rotate(pitch, new Vector3f(1.0f, 0.0f, 0.0f));
-        view.rotate(yaw, new Vector3f(0.0f, 1.0f, 0.0f));
-        view.translate(new Vector3f(0.0f, -entity.getEyeHeight(), 0.0f));
-
-        FloatBuffer modelMatrix = FloatBuffer.allocate(16);
-        view.store(modelMatrix); modelMatrix.position(0);
-        FloatBuffer projMatrix = FloatBuffer.allocate(16);
-        projection.store(projMatrix); projMatrix.position(0);
-        IntBuffer viewport = IntBuffer.allocate(4);
-        viewport.put(new int[]{0, 0, this.displayWidth, this.displayHeight}); viewport.position(0);
-        FloatBuffer obj_pos = ByteBuffer.allocateDirect(10 * 4)
-                .order(ByteOrder.nativeOrder())
-                .asFloatBuffer();
-        // gluUnProject does not advance any buffer positions
-        Project.gluUnProject(0.0f, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
-        Project.gluUnProject(this.displayWidth, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
-        Project.gluUnProject(0.0f, displayHeight, 0.0f, modelMatrix, projMatrix, viewport, obj_pos); obj_pos.position(obj_pos.position() + 3);
-        obj_pos.put(fov);
-
-        setViewingPlane(obj_pos);
-    }
-
     /**
      * Replace default video settings screen with custom raytracer options menu
      * @param event
@@ -229,7 +149,7 @@ public class Raytracer {
     public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
         if (event.phase == TickEvent.Phase.START) {
-            this.updateCameraAndRender();
+            renderer.updateCameraAndRender();
 
             // Run raytracer
             int texture = raytrace();
@@ -244,7 +164,7 @@ public class Raytracer {
             GL11.glMatrixMode(GL11.GL_PROJECTION);
             GL11.glPushMatrix();
             GL11.glLoadIdentity();
-            GL11.glOrtho(0.0, (double) displayWidth, (double) displayHeight, 0.0, -1.0, 1.0);
+            GL11.glOrtho(0.0, (double) this.mc.displayWidth, (double) this.mc.displayHeight, 0.0, -1.0, 1.0);
             GL11.glBegin(GL11.GL_QUADS);
 
             GL11.glTexCoord2f(0.0f, 0.0f); GL11.glVertex2f(0.0f, textureHeight);
@@ -260,20 +180,10 @@ public class Raytracer {
             // Render overlay (Inventory, Menu)
             renderGameOverlay(event.renderTickTime);
 
-            takeOverTheWorld();
+            renderer.takeOverTheWorld();
         } else if (event.phase == TickEvent.Phase.END) {
-            restoreTheWorld();
+            renderer.restoreTheWorld();
         }
-    }
-
-    private void takeOverTheWorld() {
-        wc = mc.theWorld;
-        mc.theWorld = null;
-    }
-
-    private void restoreTheWorld() {
-        mc.theWorld = wc;
-        wc = null;
     }
 
     private void renderGameOverlay(float renderTickTime) {
