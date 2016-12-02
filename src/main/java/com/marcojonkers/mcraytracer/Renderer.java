@@ -56,6 +56,10 @@ public class Renderer {
         return glhFrustumf2(-xmax, xmax, -ymax, ymax, znear, zfar);
     }
 
+    private void setupTerrain() {
+
+    }
+
     public void updateCameraAndRender() {
         // Set camera
         Entity entity = this.mc.getRenderViewEntity();
@@ -110,6 +114,8 @@ public class Renderer {
         obj_pos.put(fov);
 
         raytracer.setViewingPlane(obj_pos);
+
+        setupTerrain();
     }
 
     public void takeOverTheWorld() {
