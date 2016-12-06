@@ -3,6 +3,9 @@ package com.marcojonkers.mcraytracer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.Matrix4f;
+import net.minecraft.client.renderer.ViewFrustum;
+import net.minecraft.client.renderer.chunk.IRenderChunkFactory;
+import net.minecraft.client.renderer.chunk.VboChunkFactory;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.MathHelper;
 import org.lwjgl.util.glu.Project;
@@ -17,6 +20,10 @@ public class Renderer {
     private Raytracer raytracer;
     private Minecraft mc;
     private WorldClient wc;
+
+    private int renderDistanceChunks;
+    private ViewFrustum viewFrustum;
+    private IRenderChunkFactory renderChunkFactory;
 
     public Renderer(Raytracer raytracer) {
         this.raytracer = raytracer;
@@ -57,7 +64,14 @@ public class Renderer {
     }
 
     private void setupTerrain() {
-
+        if (this.mc.gameSettings.renderDistanceChunks != this.renderDistanceChunks) {
+            if (this.viewFrustum != null) {
+                this.viewFrustum.deleteGlResources();
+            }
+            this.renderDistanceChunks = this.mc.gameSettings.renderDistanceChunks;
+            this.renderChunkFactory = new VboChunkFactory();
+            this.viewFrustum = new ViewFrustum(this.wc, this.mc.gameSettings.renderDistanceChunks, this.mc.renderGlobal, this.renderChunkFactory);
+        }
     }
 
     public void updateCameraAndRender() {
