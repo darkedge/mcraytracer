@@ -131,14 +131,4 @@ public class Renderer {
 
         setupTerrain();
     }
-
-    public void takeOverTheWorld() {
-        wc = mc.theWorld;
-        mc.theWorld = null;
-    }
-
-    public void restoreTheWorld() {
-        mc.theWorld = wc;
-        wc = null;
-    }
 }

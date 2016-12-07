@@ -32,7 +32,6 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Arrays;
 
-@Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
     static {
         System.loadLibrary("loader");
@@ -61,8 +60,7 @@ public class Raytracer {
     public native int raytrace();
     public native void setViewingPlane(FloatBuffer buffer);
 
-    @EventHandler
-    public void init(FMLInitializationEvent event) {
+    public Raytracer() {
         mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
         ClientRegistry.registerKeyBinding(TOGGLE_KEY);
@@ -96,28 +94,6 @@ public class Raytracer {
         }
     }
 
-    /**
-     * Needed to prevent GUI screens showing the default dirt background
-     * @param event
-     */
-    @SubscribeEvent
-    public void onPreDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Pre event) {
-        if (enabled) {
-            renderer.restoreTheWorld();
-        }
-    }
-
-    /**
-     * Needed to prevent GUI screens showing the default dirt background
-     * @param event
-     */
-    @SubscribeEvent
-    public void onPostDrawScreenEvent(GuiScreenEvent.DrawScreenEvent.Post event) {
-        if (enabled) {
-            renderer.takeOverTheWorld();
-        }
-    }
-
     public Vector3f getViewVector(Entity entityIn, double partialTicks) {
         float f = (float)((double)entityIn.prevRotationPitch + (double)(entityIn.rotationPitch - entityIn.prevRotationPitch) * partialTicks);
         float f1 = (float)((double)entityIn.prevRotationYaw + (double)(entityIn.rotationYaw - entityIn.prevRotationYaw) * partialTicks);
@@ -133,22 +109,13 @@ public class Raytracer {
         return new Vector3f(f3 * f4, f5, f2 * f4);
     }
 
-    /**
-     * Replace default video settings screen with custom raytracer options menu
-     * @param event
-     */
-    @SubscribeEvent
-    public void onGuiOpenEvent(GuiOpenEvent event) {
-        GuiScreen gui = event.getGui();
-        if (gui instanceof GuiVideoSettings) {
-            event.setGui(new GuiRaytracerSettings(mc.currentScreen, this.mc.gameSettings));
-        }
-    }
-
     @SubscribeEvent
     public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
         if (!enabled) return;
-        if (event.phase == TickEvent.Phase.START) {
+        if (event.phase == TickEvent.Phase.END) {
+            Entity entity = this.mc.getRenderViewEntity();
+            if (entity == null) return;
+
             renderer.updateCameraAndRender();
 
             // Run raytracer
@@ -177,12 +144,8 @@ public class Raytracer {
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glPopMatrix();
 
-            // Render overlay (Inventory, Menu)
+            // Render overlay (hotbar, vignette)
             renderGameOverlay(event.renderTickTime);
-
-            renderer.takeOverTheWorld();
-        } else if (event.phase == TickEvent.Phase.END) {
-            renderer.restoreTheWorld();
         }
     }
 
