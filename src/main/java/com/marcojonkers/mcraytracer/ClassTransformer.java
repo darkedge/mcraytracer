@@ -216,10 +216,16 @@ public class ClassTransformer implements IClassTransformer {
             return patchVboRenderList(name, basicClass, false);
         }
 
+        if (name.equals("bnz")) {
+            return patchEntityRenderer(name, basicClass, true);
+        }
         if (name.equals("net.minecraft.client.renderer.EntityRenderer")) {
             return patchEntityRenderer(name, basicClass, false);
         }
 
+        if (name.equals("bgb")) {
+            return patchGuiVideoSettings(name, basicClass, true);
+        }
         if (name.equals("net.minecraft.client.gui.GuiVideoSettings")) {
             return patchGuiVideoSettings(name, basicClass, false);
         }
