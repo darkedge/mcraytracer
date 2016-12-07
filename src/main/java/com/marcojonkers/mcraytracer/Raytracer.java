@@ -32,6 +32,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Arrays;
 
+@Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
     static {
         System.loadLibrary("loader");
