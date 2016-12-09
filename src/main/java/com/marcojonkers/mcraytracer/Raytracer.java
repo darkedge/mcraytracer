@@ -34,6 +34,8 @@ import java.util.Arrays;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
 public class Raytracer {
+    private static Raytracer raytracer;
+
     static {
         System.loadLibrary("loader");
     }
@@ -62,6 +64,7 @@ public class Raytracer {
     public native void setViewingPlane(FloatBuffer buffer);
 
     public Raytracer() {
+        raytracer = this;
         mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
         ClientRegistry.registerKeyBinding(TOGGLE_KEY);
