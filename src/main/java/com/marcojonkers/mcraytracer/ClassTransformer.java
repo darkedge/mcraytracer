@@ -94,7 +94,6 @@ public class ClassTransformer implements IClassTransformer {
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
                 AbstractInsnNode targetNode = null;
 
-                int foo = 0;
                 while (instructionNode.hasNext()) {
                     AbstractInsnNode instruction = instructionNode.next();
                     if (instruction instanceof MethodInsnNode) {
@@ -105,7 +104,6 @@ public class ClassTransformer implements IClassTransformer {
                             break;
                         }
                     }
-                    foo++;
                 }
 
                 // Insert hook for Raytracer
