@@ -13,9 +13,7 @@ import net.minecraft.launchwrapper.IClassTransformer;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 
 public class ClassTransformer implements IClassTransformer {
 
@@ -88,37 +86,35 @@ public class ClassTransformer implements IClassTransformer {
         ClassReader classReader = new ClassReader(basicClass);
         classReader.accept(classNode, 0);
 
-        // Add Raytracer field
-        classNode.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "raytracer", Type.getDescriptor(Raytracer.class), null, null));
-
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
             if (methodNode.name.equals(targetMethodName)) {
                 System.out.println("Found updateCameraAndRender().");
 
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
 
-                int insnIndex = 0;
+                int foo = 0;
                 while (instructionNode.hasNext()) {
                     AbstractInsnNode instruction = instructionNode.next();
                     if (instruction instanceof MethodInsnNode) {
                         MethodInsnNode methodinsn = (MethodInsnNode) instruction;
-                        if (methodinsn.name.equals("renderGameOverlay")) {
-                            System.out.println("Found renderGameOverlay().");
+                        if (methodinsn.name.equals("renderWorld")) {
+                            targetNode = instruction;
+                            System.out.println("Found renderWorld().");
                             break;
                         }
                     }
-                    insnIndex++;
+                    foo++;
                 }
 
-                List<AbstractInsnNode> list = new ArrayList();
-                // Remove 22 instructions
-                for (int i = 0; i < 22; i++) {
-                    list.add(methodNode.instructions.get(insnIndex - i));
-                }
-                for (AbstractInsnNode node : list) {
-                    methodNode.instructions.remove(node);
-                }
+                // Insert hook for Raytracer
+                InsnList hook = new InsnList();
+
+                hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "com/marcojonkers/mcraytracer/Raytracer", "getRaytracer", "()Lcom/marcojonkers/mcraytracer/Raytracer;", false));
+                hook.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "com/marcojonkers/mcraytracer/Raytracer", "onRenderTickEvent", "()V", false));
+
+                methodNode.instructions.insert(targetNode, hook);
 
                 success = true;
 

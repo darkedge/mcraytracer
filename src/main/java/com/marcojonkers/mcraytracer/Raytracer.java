@@ -73,6 +73,10 @@ public class Raytracer {
         init();
     }
 
+    public static Raytracer getRaytracer() {
+        return raytracer;
+    }
+
     @SubscribeEvent
     public void onClientTickEvent(TickEvent.ClientTickEvent event) {
         if (TOGGLE_KEY.isPressed()) {
@@ -113,56 +117,37 @@ public class Raytracer {
         return new Vector3f(f3 * f4, f5, f2 * f4);
     }
 
-    @SubscribeEvent
-    public void onRenderTickEvent(TickEvent.RenderTickEvent event) {
+    public void onRenderTickEvent() {
         if (!enabled) return;
-        if (event.phase == TickEvent.Phase.END) {
-            Entity entity = this.mc.getRenderViewEntity();
-            if (entity == null) return;
+        Entity entity = this.mc.getRenderViewEntity();
+        if (entity == null) return;
 
-            renderer.updateCameraAndRender();
+        renderer.updateCameraAndRender();
 
-            // Run raytracer
-            int texture = raytrace();
+        // Run raytracer
+        int texture = raytrace();
 
-            // Draw result to screen
-            GlStateManager.bindTexture(texture);
+        // Draw result to screen
+        GlStateManager.bindTexture(texture);
 
-            GlStateManager.enableBlend();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
-            GL11.glPushMatrix();
-            GL11.glLoadIdentity();
-            GL11.glMatrixMode(GL11.GL_PROJECTION);
-            GL11.glPushMatrix();
-            GL11.glLoadIdentity();
-            GL11.glOrtho(0.0, (double) this.mc.displayWidth, (double) this.mc.displayHeight, 0.0, -1.0, 1.0);
-            GL11.glBegin(GL11.GL_QUADS);
+        GlStateManager.enableBlend();
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glPushMatrix();
+        GL11.glLoadIdentity();
+        GL11.glMatrixMode(GL11.GL_PROJECTION);
+        GL11.glPushMatrix();
+        GL11.glLoadIdentity();
+        GL11.glOrtho(0.0, (double) this.mc.displayWidth, (double) this.mc.displayHeight, 0.0, -1.0, 1.0);
+        GL11.glBegin(GL11.GL_QUADS);
 
-            GL11.glTexCoord2f(0.0f, 0.0f); GL11.glVertex2f(0.0f, textureHeight);
-            GL11.glTexCoord2f(1.0f, 0.0f); GL11.glVertex2f(textureWidth, textureHeight);
-            GL11.glTexCoord2f(1.0f, 1.0f); GL11.glVertex2f(textureWidth, 0.0f);
-            GL11.glTexCoord2f(0.0f, 1.0f); GL11.glVertex2f(0.0f, 0.0f);
+        GL11.glTexCoord2f(0.0f, 0.0f); GL11.glVertex2f(0.0f, textureHeight);
+        GL11.glTexCoord2f(1.0f, 0.0f); GL11.glVertex2f(textureWidth, textureHeight);
+        GL11.glTexCoord2f(1.0f, 1.0f); GL11.glVertex2f(textureWidth, 0.0f);
+        GL11.glTexCoord2f(0.0f, 1.0f); GL11.glVertex2f(0.0f, 0.0f);
 
-            GL11.glEnd();
-            GL11.glPopMatrix();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
-            GL11.glPopMatrix();
-
-            // Render overlay (hotbar, vignette)
-            renderGameOverlay(event.renderTickTime);
-        }
-    }
-
-    private void renderGameOverlay(float renderTickTime) {
-        mc.mcProfiler.startSection("gui");
-
-        if (mc.thePlayer != null) {
-            if (!mc.gameSettings.hideGUI || mc.currentScreen != null) {
-                GlStateManager.alphaFunc(516, 0.1F);
-                mc.ingameGUI.renderGameOverlay(renderTickTime);
-            }
-        }
-
-        mc.mcProfiler.endSection();
+        GL11.glEnd();
+        GL11.glPopMatrix();
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glPopMatrix();
     }
 }
