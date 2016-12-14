@@ -200,6 +200,98 @@ public class ClassTransformer implements IClassTransformer {
         return writer.toByteArray();
     }
 
+    private byte[] patchRenderGlobal(String name, byte[] basicClass, boolean obfuscated) {
+        boolean success = false;
+
+        String targetMethodName;
+        if (obfuscated) {
+            targetMethodName = "TODO";
+        } else {
+            targetMethodName = "VboRenderList";
+        }
+
+        ClassNode classNode = new ClassNode();
+        ClassReader classReader = new ClassReader(basicClass);
+        classReader.accept(classNode, 0);
+
+        for (MethodNode methodNode : classNode.methods) {
+            // Compare method
+            if (methodNode.name.equals("<init>")) {
+                System.out.println("Found <init>.");
+
+                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
+
+                int insnIndex = 0;
+                while (instructionNode.hasNext()) {
+                    AbstractInsnNode instruction = instructionNode.next();
+                    /*
+                    if (instruction.getOpcode() == Opcodes.GETFIELD) {
+                        FieldInsnNode node = (FieldInsnNode) instruction;
+                        if (node.name.equals("vboEnabled")) {
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    */
+                    if (instruction.getOpcode() == Opcodes.NEW) {
+                        TypeInsnNode node = (TypeInsnNode) instruction;
+                        //if (node.desc.equals("net/minecraft/client/renderer/VboRenderList")) {
+                        if (node.desc.equals("net/minecraft/client/renderer/vertex/VertexFormat")) {
+                            System.out.println("Found NEW VertexFormat.");
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    insnIndex++;
+                }
+
+                if (targetNode != null) {
+                    //methodNode.instructions.insert(remNode0, new TypeInsnNode(Opcodes.NEW, "com/marcojonkers/mcraytracer/RaytracerRenderList"));
+                    //methodNode.instructions.remove(remNode0);
+                    //methodNode.instructions.insert(remNode1, new MethodInsnNode(Opcodes.INVOKESPECIAL, "com/marcojonkers/mcraytracer/RaytracerRenderList", "<init>", "()V", false));
+                    //methodNode.instructions.remove(remNode1);
+
+                    //AbstractInsnNode remNode0 = methodNode.instructions.get(insnIndex + 0); // NEW net/minecraft/client/renderer/VboRenderList
+                    //AbstractInsnNode remNode1 = methodNode.instructions.get(insnIndex + 1); // DUP
+                    //AbstractInsnNode remNode2 = methodNode.instructions.get(insnIndex + 2); // INVOKESPECIAL net/minecraft/client/renderer/VboRenderList.<init> ()V
+
+                    //methodNode.instructions.remove(remNode0);
+                    //methodNode.instructions.remove(remNode1);
+                    //methodNode.instructions.remove(remNode2);
+
+                    InsnList list = new InsnList();
+                    //list.add(new TypeInsnNode(Opcodes.NEW, "com/marcojonkers/mcraytracer/RaytracerRenderList"));
+                    //list.add(new InsnNode(Opcodes.DUP));
+                    //list.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "com/marcojonkers/mcraytracer/RaytracerRenderList", "<init>", "()V", false));
+
+                    list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "com/marcojonkers/mcraytracer/Raytracer", "getRaytracer", "()Lcom/marcojonkers/mcraytracer/Raytracer;", false));
+                    list.add(new FieldInsnNode(Opcodes.GETFIELD, "com/marcojonkers/mcraytracer/Raytracer", "renderContainer", "Lnet/minecraft/client.renderer/ChunkRenderContainer;"));
+                    list.add(new FieldInsnNode(Opcodes.PUTFIELD, "net/minecraft/client/renderer/RenderGlobal", "renderContainer", "Lnet/minecraft/client/renderer/ChunkRenderContainer"));
+                    list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+
+                    //methodNode.instructions.insertBefore(methodNode.instructions.get(insnIndex), list);
+
+                    Iterator<AbstractInsnNode> i2 = methodNode.instructions.iterator();
+                    while (i2.hasNext()) {
+                        System.out.println(insnToString(i2.next()));
+                    }
+
+                    success = true;
+                }
+
+                // Stop looking for methods
+                break;
+            }
+        }
+
+        System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
+
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+        classNode.accept(writer);
+        return writer.toByteArray();
+    }
+
     @Override
     // TODO: Obfuscated names
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
@@ -222,6 +314,13 @@ public class ClassTransformer implements IClassTransformer {
         }
         if (name.equals("net.minecraft.client.gui.GuiVideoSettings")) {
             return patchGuiVideoSettings(name, basicClass, false);
+        }
+
+        if (name.equals("boh")) {
+            //return patchRenderGlobal(name, basicClass, true);
+        }
+        if (name.equals("net.minecraft.client.renderer.RenderGlobal")) {
+            //return patchRenderGlobal(name, basicClass, false);
         }
 
         return basicClass;

@@ -4,10 +4,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiVideoSettings;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.Matrix4f;
+import net.minecraft.client.renderer.*;
+import net.minecraft.client.renderer.chunk.ListChunkFactory;
+import net.minecraft.client.renderer.chunk.VboChunkFactory;
+import net.minecraft.client.renderer.vertex.VertexBuffer;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.client.event.GuiOpenEvent;
@@ -62,6 +65,9 @@ public class Raytracer {
     public native void resize(int width, int height);
     public native int raytrace();
     public native void setViewingPlane(FloatBuffer buffer);
+    public native void setVertexBuffer(int x, int y, int z, VertexBuffer buffer);
+
+    public ChunkRenderContainer renderContainer;
 
     public Raytracer() {
         raytracer = this;
@@ -69,6 +75,8 @@ public class Raytracer {
         MinecraftForge.EVENT_BUS.register(this);
         ClientRegistry.registerKeyBinding(TOGGLE_KEY);
         renderer = new Renderer(this);
+
+        this.renderContainer = new RaytracerRenderList();
 
         init();
     }
