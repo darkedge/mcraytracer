@@ -37,6 +37,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
+    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject);
 }
 
 static jmethodID jni_println;
@@ -192,4 +193,9 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
     float originDistance = (length(p0p2) * 0.5f) / tanf(buffer[9] * 0.5f);
     Vector3 originDir = normalize(cross(p0p1, p0p2));
     Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
+}
+
+//void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
+void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject) {
+
 }

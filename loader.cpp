@@ -31,6 +31,9 @@ typedef RT_RAYTRACE(RaytraceFunc);
 #define RT_SET_VIEWING_PLANE(name) void name(JNIEnv*, jobject)
 typedef RT_SET_VIEWING_PLANE(SetViewingPlaneFunc);
 
+#define RT_SET_VERTEX_BUFFER(name) void name(JNIEnv*, jint, jint, jint, jobject)
+typedef RT_SET_VERTEX_BUFFER(SetVertexBufferFunc);
+
 
 struct Raytracer {
     InitFunc* Init;
@@ -38,6 +41,7 @@ struct Raytracer {
     RaytraceFunc* Raytrace;
     ResizeFunc* Resize;
     SetViewingPlaneFunc* SetViewingPlane;
+    SetVertexBufferFunc* SetVertexBuffer;
 
     FILETIME DLLLastWriteTime;
     bool valid;
@@ -104,13 +108,15 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.Resize = (ResizeFunc*)GetProcAddress(raytracer.dll, "Resize");
             raytracer.Raytrace = (RaytraceFunc*)GetProcAddress(raytracer.dll, "Raytrace");
             raytracer.SetViewingPlane = (SetViewingPlaneFunc*)GetProcAddress(raytracer.dll, "SetViewingPlane");
+            raytracer.SetVertexBuffer = (SetVertexBufferFunc*)GetProcAddress(raytracer.dll, "SetVertexBuffer");
 
             raytracer.valid = 
                 raytracer.Init &&
                 raytracer.Destroy &&
                 raytracer.Resize &&
                 raytracer.Raytrace &&
-                raytracer.SetViewingPlane;
+                raytracer.SetViewingPlane &&
+                raytracer.SetVertexBuffer;
 
             if (raytracer.valid) {
                 Log(env, "Successfully (re)loaded Raytracer DLL.");
@@ -127,6 +133,7 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.Resize = NULL;
         raytracer.Raytrace = NULL;
 		raytracer.SetViewingPlane = NULL;
+        raytracer.SetVertexBuffer = NULL;
     }
 
     return raytracer;
@@ -194,4 +201,9 @@ JNIEXPORT jint JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_raytrace
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPlane
 (JNIEnv* env, jobject, jobject arr) {
     g_raytracer.SetViewingPlane(env, arr);
+}
+
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
+(JNIEnv* env, jobject, jint x, jint y, jint z, jobject obj) {
+    g_raytracer.SetVertexBuffer(env, x, y, z, obj);
 }
