@@ -173,24 +173,18 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     rtResize(env, screenWidth, screenHeight);
 }
 
-struct Foo {
-    cudaGraphicsResource* res;
-    int glBufferId;
-};
-
-static std::vector<Foo> resources;
+static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
+static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
+static int calls = 0;
 
 jint Raytrace(JNIEnv* env) {
-    for (Foo& foo : resources) {
-        cudaGraphicsGLRegisterBuffer(&foo.res, foo.glBufferId, cudaGraphicsRegisterFlagsReadOnly);
-    }
-
+    cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
     rtRaytrace(env, gfxResource, texHeight);
-
-    for (Foo& foo : resources) {
-        cudaGraphicsUnregisterResource(foo.res);
-    }
-    resources.clear();
+    cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
+    int cache = 0; for (cudaGraphicsResource* ptr : allResources) if (ptr) cache++;
+    Log(env, std::string("buffer cache: ") + std::to_string(cache) + std::string("/") + std::to_string(allResources.size()) + std::string(", drawn buffers: ") + std::to_string(frameResources.size()) + std::string(", calls: ") + std::to_string(calls));
+    frameResources.clear();
+    calls = 0;
 
     return texture;
 }
@@ -209,12 +203,30 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
 }
 
 void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
+    calls++;
     jclass cl = env->GetObjectClass(obj);
-    jfieldID id = env->GetFieldID(cl, "glBufferId", "I");
-    int glBufferId = env->GetIntField(obj, id);
-    x;y;z;
+    int count = env->GetIntField(obj, env->GetFieldID(cl, "count", "I"));
 
-    Foo foo = {};
-    foo.glBufferId = glBufferId;
-    resources.push_back(foo);
+    // CUDA cannot register empty buffers
+    if (count == 0) return;
+
+    int glBufferId = env->GetIntField(obj, env->GetFieldID(cl, "glBufferId", "I"));
+
+    if ((glBufferId + 1) > allResources.size()) {
+        allResources.resize((glBufferId + 1), NULL);
+    }
+
+    if (!allResources[glBufferId]) {
+        // Register buffer in CUDA
+        // TODO: Unregister buffer on destroy using cudaGraphicsUnregisterResource
+        cudaGraphicsResource* dst = 0;
+        if (cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly) == cudaSuccess) {
+            // This should always succeed
+            allResources[glBufferId] = dst;
+        }
+    }
+
+    // TODO: Probably need positional data for the buffer
+    x; y; z;
+    frameResources.push_back(allResources[glBufferId]);
 }

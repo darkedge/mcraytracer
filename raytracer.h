@@ -8,12 +8,12 @@ void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);
 
-/*
+
 #define CUDA_TRY(x)\
 do {\
 	cudaError_t err = x;\
 	if (err != cudaSuccess) {\
-		Log(env, #x" failed");\
+		Log(env, std::string(#x" failed, err = ") + std::to_string(err));\
 	}\
 } while (0);
-*/
+
