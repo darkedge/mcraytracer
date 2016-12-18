@@ -61,11 +61,17 @@ public class Raytracer {
     private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, MODID);
 
     // C++ functions
-    public native void init();
-    public native void resize(int width, int height);
-    public native int raytrace();
+    private native void init();
+    private native void resize(int width, int height);
+    private native int raytrace();
     public native void setViewingPlane(FloatBuffer buffer);
-    public native void setVertexBuffer(int x, int y, int z, VertexBuffer buffer);
+    private native void setVertexBuffer(int x, int y, int z, VertexBuffer buffer);
+
+    public void setVertexBuffer(BlockPos pos, VertexBuffer buffer) {
+        if (enabled) {
+            setVertexBuffer(pos.getX(), pos.getY(), pos.getZ(), buffer);
+        }
+    }
 
     public ChunkRenderContainer renderContainer;
 

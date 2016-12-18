@@ -132,7 +132,7 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.Destroy = NULL;
         raytracer.Resize = NULL;
         raytracer.Raytrace = NULL;
-		raytracer.SetViewingPlane = NULL;
+        raytracer.SetViewingPlane = NULL;
         raytracer.SetVertexBuffer = NULL;
     }
 

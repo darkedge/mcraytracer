@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string>
+#include <vector>
 
 #include "raytracer.h"
 #include <jni.h>
@@ -155,13 +156,9 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
             Log(env, std::string("OpenGL texture id: ") + std::to_string(texture));
         }
 
-        // TODO: Debug code
-        uchar4* debugPixels = new uchar4[texWidth * texHeight];
-        memset(debugPixels, 0xFF, texWidth * texHeight * sizeof(uchar4));
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glBindTexture(GL_TEXTURE_2D, 0);
-        delete[] debugPixels;
 
         Log(env, std::string("Texture size: ") + std::to_string(texWidth) + std::string(", ") + std::to_string(texHeight));
 
@@ -176,8 +173,24 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     rtResize(env, screenWidth, screenHeight);
 }
 
+struct Foo {
+    cudaGraphicsResource* res;
+    int glBufferId;
+};
+
+static std::vector<Foo> resources;
+
 jint Raytrace(JNIEnv* env) {
+    for (Foo& foo : resources) {
+        cudaGraphicsGLRegisterBuffer(&foo.res, foo.glBufferId, cudaGraphicsRegisterFlagsReadOnly);
+    }
+
     rtRaytrace(env, gfxResource, texHeight);
+
+    for (Foo& foo : resources) {
+        cudaGraphicsUnregisterResource(foo.res);
+    }
+    resources.clear();
 
     return texture;
 }
@@ -195,7 +208,13 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
     Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
 }
 
-//void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
-void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject) {
+void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
+    jclass cl = env->GetObjectClass(obj);
+    jfieldID id = env->GetFieldID(cl, "glBufferId", "I");
+    int glBufferId = env->GetIntField(obj, id);
+    x;y;z;
 
+    Foo foo = {};
+    foo.glBufferId = glBufferId;
+    resources.push_back(foo);
 }

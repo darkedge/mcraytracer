@@ -18,7 +18,7 @@ public class RaytracerRenderList extends ChunkRenderContainer {
             {
                 VertexBuffer buffer = renderchunk.getVertexBufferByLayer(layer.ordinal());
                 BlockPos pos = renderchunk.getPosition();
-                Raytracer.getRaytracer().setVertexBuffer(pos.getX(), pos.getY(), pos.getZ(), buffer);
+                Raytracer.getRaytracer().setVertexBuffer(pos, buffer);
             }
         }
     }
