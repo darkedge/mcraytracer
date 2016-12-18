@@ -39,6 +39,7 @@ extern "C" {
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
     MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject);
+    MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
 }
 
 static jmethodID jni_println;
@@ -175,16 +176,13 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
 
 static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
-static int calls = 0;
+static double viewEntityX, viewEntityY, viewEntityZ;
 
 jint Raytrace(JNIEnv* env) {
     cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
     rtRaytrace(env, gfxResource, texHeight);
     cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
-    int cache = 0; for (cudaGraphicsResource* ptr : allResources) if (ptr) cache++;
-    Log(env, std::string("buffer cache: ") + std::to_string(cache) + std::string("/") + std::to_string(allResources.size()) + std::string(", drawn buffers: ") + std::to_string(frameResources.size()) + std::string(", calls: ") + std::to_string(calls));
     frameResources.clear();
-    calls = 0;
 
     return texture;
 }
@@ -202,8 +200,8 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
     Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
 }
 
-void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
-    calls++;
+// TODO: Add layer index
+void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jobject obj) {
     jclass cl = env->GetObjectClass(obj);
     int count = env->GetIntField(obj, env->GetFieldID(cl, "count", "I"));
 
@@ -220,13 +218,26 @@ void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject obj) {
         // Register buffer in CUDA
         // TODO: Unregister buffer on destroy using cudaGraphicsUnregisterResource
         cudaGraphicsResource* dst = 0;
-        if (cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly) == cudaSuccess) {
-            // This should always succeed
-            allResources[glBufferId] = dst;
-        }
+        cudaError err = cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly);
+        assert(err == cudaSuccess);
+        assert(dst);
+        allResources[glBufferId] = dst;
     }
 
-    // TODO: Probably need positional data for the buffer
-    x; y; z;
+    int x = (int)((double)chunkX - viewEntityX) / 16 + 12;
+    int y = chunkY / 16;
+    int z = (int)((double)chunkZ - viewEntityZ) / 16 + 12;
+    assert(x >= 0); assert(x <= 24);
+    assert(y >= 0); assert(y <= 16);
+    assert(z >= 0); assert(z <= 24);
+
     frameResources.push_back(allResources[glBufferId]);
+}
+
+// This is called before SetVertexBuffer.
+void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
+    env;
+    viewEntityX = x;
+    viewEntityY = y;
+    viewEntityZ = z;
 }

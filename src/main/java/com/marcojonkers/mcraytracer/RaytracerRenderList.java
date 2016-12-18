@@ -7,15 +7,16 @@ import net.minecraft.util.BlockRenderLayer;
 import net.minecraft.util.math.BlockPos;
 
 public class RaytracerRenderList extends ChunkRenderContainer {
-    public RaytracerRenderList() {
-        System.out.println("RaytracerRenderList WORKS!");
+    @Override
+    public void initialize(double viewEntityXIn, double viewEntityYIn, double viewEntityZIn) {
+        super.initialize(viewEntityXIn, viewEntityYIn, viewEntityZIn);
+        Raytracer.getRaytracer().setViewEntity(viewEntityXIn, viewEntityYIn, viewEntityZIn);
     }
 
     @Override
     public void renderChunkLayer(BlockRenderLayer layer) {
         if (this.initialized) {
-            for (RenderChunk renderchunk : this.renderChunks)
-            {
+            for (RenderChunk renderchunk : this.renderChunks) {
                 VertexBuffer buffer = renderchunk.getVertexBufferByLayer(layer.ordinal());
                 BlockPos pos = renderchunk.getPosition();
                 Raytracer.getRaytracer().setVertexBuffer(pos, buffer);

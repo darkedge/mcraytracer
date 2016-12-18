@@ -47,6 +47,14 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPla
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
   (JNIEnv *, jobject, jint, jint, jint, jobject);
 
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    setViewEntity
+ * Signature: (DDD)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
+  (JNIEnv *, jobject, jdouble, jdouble, jdouble);
+
 #ifdef __cplusplus
 }
 #endif
