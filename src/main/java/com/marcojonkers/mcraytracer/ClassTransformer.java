@@ -18,61 +18,6 @@ import java.util.Iterator;
 public class ClassTransformer implements IClassTransformer {
 
     // http://www.minecraftforum.net/forums/mapping-and-modding/mapping-and-modding-tutorials/1571568-tutorial-1-6-2-changing-vanilla-without-editing
-    private byte[] patchVboRenderList(String name, byte[] basicClass, boolean obfuscated) {
-        boolean success = false;
-        String targetMethodName;
-        if (obfuscated) {
-            targetMethodName = "a";
-        } else {
-            targetMethodName = "renderChunkLayer";
-        }
-
-        ClassNode classNode = new ClassNode();
-        ClassReader classReader = new ClassReader(basicClass);
-        classReader.accept(classNode, 0);
-
-        for (MethodNode methodNode : classNode.methods) {
-            // Compare method
-            if (methodNode.name.equals(targetMethodName)) {
-                System.out.println("Found renderChunkLayer().");
-
-                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
-
-                int insnIndex = 0;
-                while (instructionNode.hasNext()) {
-                    AbstractInsnNode instruction = instructionNode.next();
-                    if (instruction instanceof MethodInsnNode) {
-                        MethodInsnNode methodinsn = (MethodInsnNode) instruction;
-                        if (methodinsn.name.equals("drawArrays")) {
-                            System.out.println("Found drawArrays().");
-                            break;
-                        }
-                    }
-                    insnIndex++;
-                }
-
-                AbstractInsnNode remNode1 = methodNode.instructions.get(insnIndex-2); // ALOAD 4
-                AbstractInsnNode remNode2 = methodNode.instructions.get(insnIndex-1); // BIPUSH 7
-                AbstractInsnNode remNode3 = methodNode.instructions.get(insnIndex); // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.drawArrays (I)V
-
-                methodNode.instructions.remove(remNode1);
-                methodNode.instructions.remove(remNode2);
-                methodNode.instructions.remove(remNode3);
-
-                success = true;
-
-                // Stop looking for methods
-                break;
-            }
-        }
-
-        System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
-
-        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
-        classNode.accept(writer);
-        return writer.toByteArray();
-    }
-
     private byte[] patchEntityRenderer(String name, byte[] basicClass, boolean obfuscated) {
         boolean success = false;
         String targetMethodName;
@@ -264,13 +209,6 @@ public class ClassTransformer implements IClassTransformer {
     @Override
     // TODO: Obfuscated names
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
-        if (name.equals("boo")) {
-            return patchVboRenderList(name, basicClass, true);
-        }
-        if (name.equals("net.minecraft.client.renderer.VboRenderList")) {
-            return patchVboRenderList(name, basicClass, false);
-        }
-
         if (name.equals("bnz")) {
             return patchEntityRenderer(name, basicClass, true);
         }
