@@ -42,10 +42,10 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPla
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
  * Method:    setVertexBuffer
- * Signature: (IIILnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+ * Signature: (IIIILnet/minecraft/client/renderer/vertex/VertexBuffer;)V
  */
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
-  (JNIEnv *, jobject, jint, jint, jint, jobject);
+  (JNIEnv *, jobject, jint, jint, jint, jint, jobject);
 
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer

@@ -17,9 +17,10 @@ public class RaytracerRenderList extends ChunkRenderContainer {
     public void renderChunkLayer(BlockRenderLayer layer) {
         if (this.initialized) {
             for (RenderChunk renderchunk : this.renderChunks) {
-                VertexBuffer buffer = renderchunk.getVertexBufferByLayer(layer.ordinal());
+                int i = layer.ordinal();
+                VertexBuffer buffer = renderchunk.getVertexBufferByLayer(i);
                 BlockPos pos = renderchunk.getPosition();
-                Raytracer.getRaytracer().setVertexBuffer(pos, buffer);
+                Raytracer.getRaytracer().setVertexBuffer(pos, i, buffer);
             }
         }
     }

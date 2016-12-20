@@ -65,13 +65,13 @@ public class Raytracer {
     private native void resize(int width, int height);
     private native int raytrace();
     public native void setViewingPlane(FloatBuffer buffer);
-    private native void setVertexBuffer(int x, int y, int z, VertexBuffer buffer);
+    private native void setVertexBuffer(int x, int y, int z, int pass, VertexBuffer buffer);
     public native void setViewEntity(double x, double y, double z);
 
     // TODO: Group calls together to prevent JNI overhead
-    public void setVertexBuffer(BlockPos pos, VertexBuffer buffer) {
+    public void setVertexBuffer(BlockPos pos, int pass, VertexBuffer buffer) {
         if (enabled) {
-            setVertexBuffer(pos.getX(), pos.getY(), pos.getZ(), buffer);
+            setVertexBuffer(pos.getX(), pos.getY(), pos.getZ(), pass, buffer);
         }
     }
 

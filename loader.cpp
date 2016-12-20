@@ -31,7 +31,7 @@ typedef RT_RAYTRACE(RaytraceFunc);
 #define RT_SET_VIEWING_PLANE(name) void name(JNIEnv*, jobject)
 typedef RT_SET_VIEWING_PLANE(SetViewingPlaneFunc);
 
-#define RT_SET_VERTEX_BUFFER(name) void name(JNIEnv*, jint, jint, jint, jobject)
+#define RT_SET_VERTEX_BUFFER(name) void name(JNIEnv*, jint, jint, jint, jint, jobject)
 typedef RT_SET_VERTEX_BUFFER(SetVertexBufferFunc);
 
 #define RT_SET_VIEW_ENTITY(name) void name(JNIEnv*, jdouble, jdouble, jdouble)
@@ -211,8 +211,8 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPla
 }
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
-(JNIEnv* env, jobject, jint x, jint y, jint z, jobject obj) {
-    g_raytracer.SetVertexBuffer(env, x, y, z, obj);
+(JNIEnv* env, jobject, jint x, jint y, jint z, jint pass, jobject obj) {
+    g_raytracer.SetVertexBuffer(env, x, y, z, pass, obj);
 }
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity

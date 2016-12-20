@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <set>
 
 #include "raytracer.h"
 #include <jni.h>
@@ -38,7 +39,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
-    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject);
+    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
 }
 
@@ -174,15 +175,54 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     rtResize(env, screenWidth, screenHeight);
 }
 
+struct GfxRes2DevPtr {
+    int count;
+    int x;
+    int y;
+    int z;
+    int i;
+};
+
+#define MAX_RENDER_DISTANCE 32
+#define GRID_DIM (MAX_RENDER_DISTANCE + 1 + MAX_RENDER_DISTANCE)
+#define VERTEX_SIZE_BYTES 28
 static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
+static std::vector<GfxRes2DevPtr> translations;
 static double viewEntityX, viewEntityY, viewEntityZ;
+#define DEVICE_PTRS_COUNT GRID_DIM * GRID_DIM * 16 * 4
+static void* devicePointers[DEVICE_PTRS_COUNT];
+static std::set<int> buffers;
 
 jint Raytrace(JNIEnv* env) {
-    cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
+    memset(devicePointers, 0, DEVICE_PTRS_COUNT * sizeof(void*));
+    cudaError err;
+    err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
+    if (err != cudaSuccess) {
+        Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err));
+    }
+    
+    for (int i = 0; i < translations.size(); i++) {
+        GfxRes2DevPtr& t = translations[i];
+
+        size_t bufferSize;
+        if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointers[t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i], &bufferSize, frameResources[i])) != cudaSuccess) {
+            Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err));
+            continue;
+        }
+        assert(bufferSize == t.count * VERTEX_SIZE_BYTES);
+    }
+
     rtRaytrace(env, gfxResource, texHeight);
-    cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
+    err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
+    if (err != cudaSuccess) {
+        Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err));
+    }
+
+    // Clear per-frame data
     frameResources.clear();
+    translations.clear();
+    buffers.clear();
 
     return texture;
 }
@@ -200,8 +240,7 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
     Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
 }
 
-// TODO: Add layer index
-void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jobject obj) {
+void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pass, jobject obj) {
     jclass cl = env->GetObjectClass(obj);
     int count = env->GetIntField(obj, env->GetFieldID(cl, "count", "I"));
 
@@ -209,6 +248,11 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jobject
     if (count == 0) return;
 
     int glBufferId = env->GetIntField(obj, env->GetFieldID(cl, "glBufferId", "I"));
+
+    // Prevent duplicate vertex buffers
+    // TODO: Why does this happen?
+    if (buffers.find(glBufferId) != buffers.end()) return;
+    buffers.insert(glBufferId);
 
     if ((glBufferId + 1) > allResources.size()) {
         allResources.resize((glBufferId + 1), NULL);
@@ -224,13 +268,20 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jobject
         allResources[glBufferId] = dst;
     }
 
-    int x = (int)((double)chunkX - viewEntityX) / 16 + 12;
+    int x = (int)((double)chunkX - viewEntityX) / 16 + MAX_RENDER_DISTANCE;
     int y = chunkY / 16;
-    int z = (int)((double)chunkZ - viewEntityZ) / 16 + 12;
-    assert(x >= 0); assert(x <= 24);
-    assert(y >= 0); assert(y <= 16);
-    assert(z >= 0); assert(z <= 24);
+    int z = (int)((double)chunkZ - viewEntityZ) / 16 + MAX_RENDER_DISTANCE;
+    assert(x >= 0); assert(x < GRID_DIM);
+    assert(y >= 0); assert(y < 16);
+    assert(z >= 0); assert(z < GRID_DIM);
 
+    GfxRes2DevPtr translation = { 0 };
+    translation.count = count;
+    translation.i = pass;
+    translation.x = x;
+    translation.y = y;
+    translation.z = z;
+    translations.push_back(translation);
     frameResources.push_back(allResources[glBufferId]);
 }
 
