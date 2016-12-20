@@ -156,9 +156,9 @@ public class Raytracer {
         GL11.glOrtho(0.0, (double) this.mc.displayWidth, (double) this.mc.displayHeight, 0.0, -1.0, 1.0);
         GL11.glBegin(GL11.GL_QUADS);
 
-        GL11.glTexCoord2f(0.0f, 0.0f); GL11.glVertex2f(0.0f, textureHeight);
-        GL11.glTexCoord2f(1.0f, 0.0f); GL11.glVertex2f(textureWidth, textureHeight);
-        GL11.glTexCoord2f(1.0f, 1.0f); GL11.glVertex2f(textureWidth, 0.0f);
+        GL11.glTexCoord2f(0.0f, 1.0f - (float)this.mc.displayHeight / this.textureHeight); GL11.glVertex2f(0.0f, this.mc.displayHeight);
+        GL11.glTexCoord2f((float)this.mc.displayWidth / this.textureWidth, 1.0f - (float)this.mc.displayHeight / this.textureHeight); GL11.glVertex2f(this.mc.displayWidth, this.mc.displayHeight);
+        GL11.glTexCoord2f((float)this.mc.displayWidth / this.textureWidth, 1.0f); GL11.glVertex2f(this.mc.displayWidth, 0.0f);
         GL11.glTexCoord2f(0.0f, 1.0f); GL11.glVertex2f(0.0f, 0.0f);
 
         GL11.glEnd();
