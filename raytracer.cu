@@ -40,13 +40,6 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     if (err != cudaSuccess) {
         Log(env, std::string("cudaMalloc failed: ") + std::to_string(err));
     }
-
-    // TODO: Debug code, remove when done
-    size_t kernelOutputBufferSize = g_screenHeight * g_bufferPitch;
-    err = cudaMemset(kernelOutputBuffer, 0xFF, kernelOutputBufferSize);
-    if (err != cudaSuccess) {
-        Log(env, std::string("cudaMemset failed: ") + std::to_string(err));
-    }
 }
 
 void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
