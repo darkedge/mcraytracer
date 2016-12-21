@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
-#include <set>
 
 #include "raytracer.h"
 #include <jni.h>
@@ -43,13 +42,8 @@ extern "C" {
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
 }
 
-static jmethodID jni_println;
-static jmethodID jni_ebs_get;
-static jmethodID jni_ibs_getBlock;
-static jmethodID jni_block_getIdFromBlock;
-static jmethodID jni_chunk_getBlockStorageArray;
-static jclass jni_system;
-static jfieldID jni_system_out_id;
+static jfieldID jni_VertexBuffer_count;
+static jfieldID jni_VertexBuffer_glBufferId;
 
 void CacheJNI(JNIEnv* env) {
 #if 0
@@ -61,15 +55,10 @@ void CacheJNI(JNIEnv* env) {
     jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
 #endif
 
-    // Chunk.getBlockStorageArray
-    jclass chunk = env->FindClass("net/minecraft/world/chunk/Chunk");
-    jni_chunk_getBlockStorageArray = env->GetMethodID(chunk, "getBlockStorageArray", "()[Lnet/minecraft/world/chunk/storage/ExtendedBlockStorage;");
-    jclass ebs = env->FindClass("net/minecraft/world/chunk/storage/ExtendedBlockStorage");
-    jni_ebs_get = env->GetMethodID(ebs, "get", "(III)Lnet/minecraft/block/state/IBlockState;");
-    jclass ibs = env->FindClass("net/minecraft/block/state/IBlockState");
-    jni_ibs_getBlock = env->GetMethodID(ibs, "getBlock", "()Lnet/minecraft/block/Block;");
-    jclass block = env->FindClass("net/minecraft/block/Block");
-    jni_block_getIdFromBlock = env->GetStaticMethodID(block, "getIdFromBlock", "(Lnet/minecraft/block/Block;)I");
+    // TODO: Obfuscated names
+    jclass vertexBuffer = env->FindClass("net/minecraft/client/renderer/vertex/VertexBuffer");
+    jni_VertexBuffer_count = env->GetFieldID(vertexBuffer, "count", "I");
+    jni_VertexBuffer_glBufferId = env->GetFieldID(vertexBuffer, "glBufferId", "I");
 }
 
 void Log(JNIEnv* env, const std::string& stdstr) {
@@ -192,7 +181,6 @@ static std::vector<GfxRes2DevPtr> translations;
 static double viewEntityX, viewEntityY, viewEntityZ;
 #define DEVICE_PTRS_COUNT GRID_DIM * GRID_DIM * 16 * 4
 static void* devicePointers[DEVICE_PTRS_COUNT];
-static std::set<int> buffers;
 
 jint Raytrace(JNIEnv* env) {
     memset(devicePointers, 0, DEVICE_PTRS_COUNT * sizeof(void*));
@@ -210,7 +198,7 @@ jint Raytrace(JNIEnv* env) {
             Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err));
             continue;
         }
-        assert(bufferSize == t.count * VERTEX_SIZE_BYTES);
+        assert(bufferSize >= t.count * VERTEX_SIZE_BYTES);
     }
 
     rtRaytrace(env, gfxResource, texHeight);
@@ -222,7 +210,6 @@ jint Raytrace(JNIEnv* env) {
     // Clear per-frame data
     frameResources.clear();
     translations.clear();
-    buffers.clear();
 
     return texture;
 }
@@ -241,19 +228,14 @@ void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
 }
 
 void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pass, jobject obj) {
-    jclass cl = env->GetObjectClass(obj);
-    int count = env->GetIntField(obj, env->GetFieldID(cl, "count", "I"));
+    int count = env->GetIntField(obj, jni_VertexBuffer_count);
 
     // CUDA cannot register empty buffers
     if (count == 0) return;
 
-    int glBufferId = env->GetIntField(obj, env->GetFieldID(cl, "glBufferId", "I"));
+    int glBufferId = env->GetIntField(obj, jni_VertexBuffer_glBufferId);
 
-    // Prevent duplicate vertex buffers
-    // TODO: Why does this happen?
-    if (buffers.find(glBufferId) != buffers.end()) return;
-    buffers.insert(glBufferId);
-
+    chunkX; chunkY; chunkZ; pass; glBufferId;
     if ((glBufferId + 1) > allResources.size()) {
         allResources.resize((glBufferId + 1), NULL);
     }
