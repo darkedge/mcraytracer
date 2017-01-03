@@ -128,6 +128,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
 
         // Unregister CUDA resource
         if (gfxResource) {
+            cudaGraphicsUnmapResources(1, &gfxResource);
             err = cudaGraphicsUnregisterResource(gfxResource);
             if (err != cudaSuccess) {
                 Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err));
@@ -158,6 +159,8 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
         if (err != cudaSuccess) {
             Log(env, std::string("cudaGraphicsGLRegisterImage failed: ") + std::to_string(err));
         }
+
+        cudaGraphicsMapResources(1, &gfxResource);
     }
 
     // CUDA does not need to know the texture width

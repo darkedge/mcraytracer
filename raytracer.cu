@@ -50,7 +50,6 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
     Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch);
 
     // Copy CUDA result to OpenGL texture
-    cudaGraphicsMapResources(1, &glTexture);
     cudaArray* mappedGLArray;
     cudaGraphicsSubResourceGetMappedArray(&mappedGLArray, glTexture, 0, 0);
 
@@ -65,6 +64,4 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
         g_screenHeight,             // height
         cudaMemcpyDeviceToDevice    // kind
     );
-
-    cudaGraphicsUnmapResources(1, &glTexture);
 }
