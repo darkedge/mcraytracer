@@ -175,14 +175,10 @@ struct GfxRes2DevPtr {
     int i;
 };
 
-#define MAX_RENDER_DISTANCE 32
-#define GRID_DIM (MAX_RENDER_DISTANCE + 1 + MAX_RENDER_DISTANCE)
-#define VERTEX_SIZE_BYTES 28
 static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
 static std::vector<GfxRes2DevPtr> translations;
 static double viewEntityX, viewEntityY, viewEntityZ;
-#define DEVICE_PTRS_COUNT GRID_DIM * GRID_DIM * 16 * 4
 static void* devicePointers[DEVICE_PTRS_COUNT];
 
 jint Raytrace(JNIEnv* env) {
