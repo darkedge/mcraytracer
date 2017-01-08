@@ -19,7 +19,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch) {
     int offset = (y * bufferPitch) + x * sizeof(uchar4);
     if (offset >= bufferPitch * height) return;
 
-    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 255.0f, v * 255.0f, 255.0f, 255.0f);
+    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 256.0f, 256.0f);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
