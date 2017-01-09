@@ -19,11 +19,6 @@ import java.nio.IntBuffer;
 public class Renderer {
     private Raytracer raytracer;
     private Minecraft mc;
-    private WorldClient wc;
-
-    private int renderDistanceChunks;
-    private ViewFrustum viewFrustum;
-    private IRenderChunkFactory renderChunkFactory;
 
     public Renderer(Raytracer raytracer) {
         this.raytracer = raytracer;
@@ -61,17 +56,6 @@ public class Renderer {
         ymax = znear * (float) Math.tan(fovy * Math.PI / 360.0);
         xmax = ymax * aspect;
         return glhFrustumf2(-xmax, xmax, -ymax, ymax, znear, zfar);
-    }
-
-    private void setupTerrain() {
-        if (this.mc.gameSettings.renderDistanceChunks != this.renderDistanceChunks) {
-            if (this.viewFrustum != null) {
-                this.viewFrustum.deleteGlResources();
-            }
-            this.renderDistanceChunks = this.mc.gameSettings.renderDistanceChunks;
-            this.renderChunkFactory = new VboChunkFactory();
-            this.viewFrustum = new ViewFrustum(this.wc, this.mc.gameSettings.renderDistanceChunks, this.mc.renderGlobal, this.renderChunkFactory);
-        }
     }
 
     public void updateCameraAndRender() {
@@ -128,7 +112,5 @@ public class Renderer {
         obj_pos.put(fov);
 
         raytracer.setViewingPlane(obj_pos);
-
-        setupTerrain();
     }
 }
