@@ -171,6 +171,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     rtResize(env, screenWidth, screenHeight);
 }
 
+// Mapped to [0, GRID_DIM)
 struct GfxRes2DevPtr {
     int count;
     int x;
