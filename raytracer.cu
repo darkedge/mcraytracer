@@ -22,7 +22,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers
     float3 point = (lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v)) * 0.5f;
     float3 dir = normalize(point - viewport.origin);
 
-    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 256.0f, 256.0f);
+    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
