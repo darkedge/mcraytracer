@@ -16,9 +16,9 @@ void Log(JNIEnv*, const std::string&);
 
 #define CUDA_TRY(x)\
 do {\
-	cudaError_t err = x;\
-	if (err != cudaSuccess) {\
-		Log(env, std::string(#x" failed, err = ") + std::to_string(err));\
-	}\
+    cudaError_t err = x;\
+    if (err != cudaSuccess) {\
+        Log(env, std::string(#x" failed, err = ") + std::to_string(err));\
+    }\
 } while (0);
 
