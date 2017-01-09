@@ -8,7 +8,30 @@
 #define VERTEX_SIZE_BYTES 28
 #define DEVICE_PTRS_COUNT (GRID_DIM * GRID_DIM * 16 * 4)
 
-void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t dst, int texHeight);
+// sizeof(Vertex) should be VERTEX_SIZE_BYTES
+struct Vertex {
+    float x;
+    float y;
+    float z;
+    unsigned char rgba[4];
+    float u0;
+    float v0;
+    short u1;
+    short u2;
+};
+
+struct Quad {
+    Vertex vertices[4];
+};
+
+struct Viewport {
+    float3 origin;
+    float3 p0; // Top-left
+    float3 p1; // Top-right
+    float3 p2; // Bottom-left
+};
+
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void** devicePointers, int* arraySizes, const Viewport &viewport);
 void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);

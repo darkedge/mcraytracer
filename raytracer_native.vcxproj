@@ -95,6 +95,7 @@
     <ClCompile Include="raytracer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="helper_math.h" />
     <ClInclude Include="include\glad\glad.h" />
     <ClInclude Include="include\KHR\khrplatform.h" />
     <ClInclude Include="raytracer.h" />

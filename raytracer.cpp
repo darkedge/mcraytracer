@@ -1,3 +1,6 @@
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+
 #include <glad/glad.h>
 #include <cuda_runtime.h>
 #include <vector_types.h>
@@ -12,6 +15,7 @@
 #include <jni.h>
 
 #include <vectormath_aos.h>
+#include "helper_math.h"
 
 using namespace Vectormath::Aos;
 
@@ -179,10 +183,17 @@ static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
 static std::vector<GfxRes2DevPtr> translations;
 static double viewEntityX, viewEntityY, viewEntityZ;
+
+// Used in the kernel
 static void* devicePointers[DEVICE_PTRS_COUNT];
+static int arraySizes[DEVICE_PTRS_COUNT];
+static Viewport viewport;
 
 jint Raytrace(JNIEnv* env) {
-    memset(devicePointers, 0, DEVICE_PTRS_COUNT * sizeof(void*));
+    // Clear kernel buffers
+    memset(devicePointers, 0, sizeof(devicePointers));
+    memset(arraySizes, 0, sizeof(arraySizes));
+
     cudaError err;
     // Map all resources
     err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
@@ -195,14 +206,16 @@ jint Raytrace(JNIEnv* env) {
         GfxRes2DevPtr& t = translations[i];
 
         size_t bufferSize;
-        if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointers[t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i], &bufferSize, frameResources[i])) != cudaSuccess) {
+        size_t idx = t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i;
+        if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointers[idx], &bufferSize, frameResources[i])) != cudaSuccess) {
             Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err));
             continue;
         }
         assert(bufferSize >= t.count * VERTEX_SIZE_BYTES);
+        arraySizes[idx] = t.count;
     }
 
-    rtRaytrace(env, gfxResource, texHeight);
+    rtRaytrace(env, gfxResource, texHeight, devicePointers, arraySizes, viewport);
 
     // Unmap all resources
     err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
@@ -219,15 +232,16 @@ jint Raytrace(JNIEnv* env) {
 
 void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
     jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
-    Vector3 p0(buffer[0], buffer[1], buffer[2]);
-    Vector3 p1(buffer[3], buffer[4], buffer[5]);
-    Vector3 p2(buffer[6], buffer[7], buffer[8]);
-    Vector3 p0p1 = p1 - p0;
-    Vector3 p0p2 = p2 - p0;
+    viewport.p0 = float3{buffer[0], buffer[1], buffer[2]};
+    viewport.p1 = float3{buffer[3], buffer[4], buffer[5]};
+    viewport.p2 = float3{buffer[6], buffer[7], buffer[8]};
+    float3 p0p1 = viewport.p1 - viewport.p0;
+    float3 p0p2 = viewport.p2 - viewport.p0;
 
     float originDistance = (length(p0p2) * 0.5f) / tanf(buffer[9] * 0.5f);
-    Vector3 originDir = normalize(cross(p0p1, p0p2));
-    Vector3 origin = (p1 + p2) * 0.5f + originDir * originDistance;
+    float3 originDir = normalize(cross(p0p1, p0p2));
+
+    viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
 
 void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pass, jobject obj) {
