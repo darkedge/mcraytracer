@@ -184,11 +184,13 @@ static void* devicePointers[DEVICE_PTRS_COUNT];
 jint Raytrace(JNIEnv* env) {
     memset(devicePointers, 0, DEVICE_PTRS_COUNT * sizeof(void*));
     cudaError err;
+    // Map all resources
     err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
     if (err != cudaSuccess) {
         Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err));
     }
     
+    // Update device pointers
     for (int i = 0; i < translations.size(); i++) {
         GfxRes2DevPtr& t = translations[i];
 
@@ -201,6 +203,8 @@ jint Raytrace(JNIEnv* env) {
     }
 
     rtRaytrace(env, gfxResource, texHeight);
+
+    // Unmap all resources
     err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
     if (err != cudaSuccess) {
         Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err));
@@ -266,7 +270,7 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
     frameResources.push_back(allResources[glBufferId]);
 }
 
-// This is called before SetVertexBuffer.
+// This is called before SetVertexBuffer in order to translate the renderChunks.
 void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
     env;
     viewEntityX = x;

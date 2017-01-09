@@ -79,6 +79,7 @@ public class Raytracer {
         return raytracer;
     }
 
+    @SuppressWarnings("unused")
     @SubscribeEvent
     public void onClientTickEvent(TickEvent.ClientTickEvent event) {
         if (TOGGLE_KEY.isPressed()) {
@@ -90,6 +91,7 @@ public class Raytracer {
      * Resize the OpenGL/CUDA resources
      * @param event
      */
+    @SuppressWarnings("unused")
     @SubscribeEvent
     public void onPreInitGuiEvent(GuiScreenEvent.InitGuiEvent.Pre event) {
         if (displayWidth != mc.displayWidth || displayHeight != mc.displayHeight) {
@@ -119,6 +121,8 @@ public class Raytracer {
         return new Vector3f(f3 * f4, f5, f2 * f4);
     }
 
+    // Called by patched EntityRenderer
+    @SuppressWarnings("unused")
     public void onRenderTickEvent() {
         if (!enabled) return;
         Entity entity = this.mc.getRenderViewEntity();

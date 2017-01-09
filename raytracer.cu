@@ -47,6 +47,8 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight) {
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
+
+    // Kernel call
     Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch);
 
     // Copy CUDA result to OpenGL texture
