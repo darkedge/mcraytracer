@@ -86,8 +86,8 @@ public class Renderer {
         float yaw = entity.prevRotationYaw + (entity.rotationYaw - entity.prevRotationYaw) * partialTicks + 180.0F;
         float pitch = entity.prevRotationPitch + (entity.rotationPitch - entity.prevRotationPitch) * partialTicks;
 
-        view.rotate(pitch, new Vector3f(1.0f, 0.0f, 0.0f));
-        view.rotate(yaw, new Vector3f(0.0f, 1.0f, 0.0f));
+        view.rotate((float) Math.toRadians(pitch), new Vector3f(1.0f, 0.0f, 0.0f));
+        view.rotate((float) Math.toRadians(yaw), new Vector3f(0.0f, 1.0f, 0.0f));
         view.translate(new Vector3f(0.0f, -entity.getEyeHeight(), 0.0f));
 
         FloatBuffer modelMatrix = FloatBuffer.allocate(16);
