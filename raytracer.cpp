@@ -183,7 +183,7 @@ struct GfxRes2DevPtr {
 static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
 static std::vector<GfxRes2DevPtr> translations;
-static double viewEntityX, viewEntityY, viewEntityZ;
+static float3 viewEntity;
 
 // Used in the kernel
 static void* devicePointers[DEVICE_PTRS_COUNT];
@@ -216,7 +216,7 @@ jint Raytrace(JNIEnv* env) {
         arraySizes[idx] = t.count;
     }
 
-    rtRaytrace(env, gfxResource, texHeight, devicePointers, arraySizes, viewport);
+    rtRaytrace(env, gfxResource, texHeight, devicePointers, arraySizes, viewport, viewEntity);
 
     // Unmap all resources
     err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
@@ -268,9 +268,9 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
         allResources[glBufferId] = dst;
     }
 
-    int x = (int)((double)chunkX - viewEntityX) / 16 + MAX_RENDER_DISTANCE;
+    int x = (int)((double)chunkX - viewEntity.x) / 16 + MAX_RENDER_DISTANCE;
     int y = chunkY / 16;
-    int z = (int)((double)chunkZ - viewEntityZ) / 16 + MAX_RENDER_DISTANCE;
+    int z = (int)((double)chunkZ - viewEntity.z) / 16 + MAX_RENDER_DISTANCE;
     assert(x >= 0); assert(x < GRID_DIM);
     assert(y >= 0); assert(y < 16);
     assert(z >= 0); assert(z < GRID_DIM);
@@ -288,7 +288,5 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
 // This is called before SetVertexBuffer in order to translate the renderChunks.
 void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
     env;
-    viewEntityX = x;
-    viewEntityY = y;
-    viewEntityZ = z;
+    viewEntity = float3{(float)x, (float)y, (float)z};
 }

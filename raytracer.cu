@@ -12,7 +12,18 @@ __device__ float IntBound(float s, float ds) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers, int* arraySizes, Viewport viewport, size_t bufferPitch) {
+// Returns true if there was an intersection.
+__device__ bool TraverseRenderChunk(void** devicePointers, float3 origin, float3 direction, float* distance) {
+
+
+    return false;
+}
+
+__device__ bool IntersectQuad(float3 ray, Quad quad, float* out_distance) {
+    return false;
+}
+
+__global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     // Invert Y because OpenGL
     int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
@@ -25,72 +36,95 @@ __global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers
 
     float3 point = (lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v)) * 0.5f;
     float3 direction = normalize(point - viewport.origin);
+    float3 origin = entity + viewport.origin;
 
-    int renderChunkX = floor(viewport.origin.x) + MAX_RENDER_DISTANCE;
-    int renderChunkY = floor(viewport.origin.y);
-    int renderChunkZ = floor(viewport.origin.z) + MAX_RENDER_DISTANCE;
+    float distance = FLT_MAX;
+
+    int renderChunkX = MAX_RENDER_DISTANCE;
+    int renderChunkY = floor(origin.y) / 16;
+    int renderChunkZ = MAX_RENDER_DISTANCE;
 
     // = (-1/1) signs of vector dir
     int stepX = (direction.x < 0) ? -1 : 1;
     int stepY = (direction.y < 0) ? -1 : 1;
     int stepZ = (direction.z < 0) ? -1 : 1;
 
-    float tMaxX = IntBound(viewport.origin.x, direction.x);
-    float tMaxY = IntBound(viewport.origin.y, direction.y);
-    float tMaxZ = IntBound(viewport.origin.z, direction.z);
+    float tMaxX = IntBound(origin.x, direction.x);
+    float tMaxY = IntBound(origin.y, direction.y);
+    float tMaxZ = IntBound(origin.z, direction.z);
 
+    // TODO: Save registers
     float tDeltaX = (float)stepX / direction.x; // length of v between two YZ-boundaries
     float tDeltaY = (float)stepY / direction.y; // length of v between two XZ-boundaries
     float tDeltaZ = (float)stepZ / direction.z; // length of v between two XY-boundaries
 
     // Range of 5 renderChunks for now
-    // Max = MAX_RENDER_DISTANCE - 1
-    int radius = 5;
     do {
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
-                if (renderChunkX > radius) break;
+                if (renderChunkX < 0 || renderChunkX >= GRID_DIM) break;
                 tMaxX += tDeltaX;
-            } else {
+            }
+            else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ > radius) break;
+                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
                 tMaxZ += tDeltaZ;
             }
-        } else {
+        }
+        else {
             if (tMaxY < tMaxZ) {
                 renderChunkY += stepY;
-                if (renderChunkY > radius) break;
+                if (renderChunkY < 0 || renderChunkY >= 16) break;
                 tMaxY += tDeltaY;
-            } else {
+            }
+            else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ > radius) break;
+                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
                 tMaxZ += tDeltaZ;
             }
         }
 
-        // TODO: Test all quads in renderchunk at: renderChunkX, renderChunkY, renderChunkZ
-        int offset =
+        int devPtrOffset =
             renderChunkX * GRID_DIM * 16 * 4 +
             renderChunkZ * 16 * 4 +
             renderChunkY * 4;
-        void** relevantBuffers = devicePointers + offset;
-#if 0
+
+        // Create the ray used for intersection
+        float3 ray{
+            (tMaxX - (int)tMaxX) * 16,
+            (tMaxY - (int)tMaxY) * 16,
+            (tMaxZ - (int)tMaxZ) * 16,
+        };
+
+        if (devPtrOffset >= DEVICE_PTRS_COUNT) break;
+
+        void** ptr = devicePointers + devPtrOffset;
+
         for (int i = 0; i < 4; i++) {
             // Buffers in RenderChunk
-            Quad* buffer = (Quad*) relevantBuffers[i];
-            if (buffer)
-            for (int j = 0; j < arraySizes[offset + i]; j++) {
-                // Quads in buffer
-                buffer[j];
+            Quad* buffer = (Quad*)ptr[i];
+            if (buffer) {
+                for (int j = 0; j < arraySizes[devPtrOffset + i]; j++) {
+                    // Quads in buffer
+                    float dist;
+                    if (IntersectQuad(ray, buffer[j], &dist)) {
+                        if (dist < distance) {
+                            // TODO: Remember quad for texturing etc
+                            distance = dist;
+                        }
+                    }
+                }
             }
         }
-#endif
-        
-        // Need to check for closest intersection
+
+        if (distance != FLT_MAX) break;
     } while (true);
 
-    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
+    unsigned char val = distance != FLT_MAX ? 255 : 0;
+
+    //*((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
+    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(val, val, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
@@ -113,14 +147,14 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     }
 }
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void** devicePointers, int* arraySizes, const Viewport &viewport) {
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
 
     // Kernel call
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, g_bufferPitch);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;
