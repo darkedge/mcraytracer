@@ -68,31 +68,6 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char checks = 0;
     do {
-        if (tMaxX < tMaxY) {
-            if (tMaxX < tMaxZ) {
-                renderChunkX += stepX;
-                if (renderChunkX < 0 || renderChunkX >= GRID_DIM) break;
-                tMaxX += (float)stepX / direction.x;
-            }
-            else {
-                renderChunkZ += stepZ;
-                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += (float)stepZ / direction.z;
-            }
-        }
-        else {
-            if (tMaxY < tMaxZ) {
-                renderChunkY += stepY;
-                if (renderChunkY < 0 || renderChunkY >= 16) break;
-                tMaxY += (float)stepY / direction.y;
-            }
-            else {
-                renderChunkZ += stepZ;
-                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += (float)stepZ / direction.z;
-            }
-        }
-
         int renderChunk =
             renderChunkX * GRID_DIM * 16 * 4 +
             renderChunkZ * 16 * 4 +
@@ -105,17 +80,16 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             (tMaxZ - (int)tMaxZ) * 16,
         };
 
-        if (renderChunk >= DEVICE_PTRS_COUNT - 4) break;
+        if (checks < 255) checks += 5;
 
         for (int pass = 0; pass < 4; pass++) {
             // Buffers in RenderChunk
             Quad* buffer = vertexBuffers[renderChunk + pass];
             if (buffer) {
                 for (int j = 0; j < arraySizes[renderChunk + pass]; j++) {
-                    if(checks < 255) checks++;
-                    #if 1
                     // Quads in buffer
                     float dist = FLT_MAX;
+                    #if 0
                     if (IntersectQuad(&ray, &direction, &buffer[j], &dist)) {
                         if (dist < distance) {
                             // TODO: Remember quad for texturing etc
@@ -126,7 +100,31 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
                 }
             }
         }
-    } while (distance != FLT_MAX);
+
+        if (tMaxX < tMaxY) {
+            if (tMaxX < tMaxZ) {
+                renderChunkX += stepX;
+                if (renderChunkX < 0 || renderChunkX >= GRID_DIM) break;
+                tMaxX += (float)stepX / direction.x;
+            }
+            else {
+                renderChunkZ += stepZ;
+                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
+                tMaxZ += (float)stepZ / direction.z;
+            }
+        } else {
+            if (tMaxY < tMaxZ) {
+                renderChunkY += stepY;
+                if (renderChunkY < 0 || renderChunkY >= 16) break;
+                tMaxY += (float)stepY / direction.y;
+            }
+            else {
+                renderChunkZ += stepZ;
+                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
+                tMaxZ += (float)stepZ / direction.z;
+            }
+        }
+    } while (distance == FLT_MAX);
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
