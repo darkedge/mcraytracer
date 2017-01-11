@@ -12,18 +12,11 @@ __device__ float IntBound(float s, float ds) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
-// Returns true if there was an intersection.
-__device__ bool TraverseRenderChunk(void** devicePointers, float3 origin, float3 direction, float* distance) {
-
-
-    return false;
-}
-
 __device__ bool IntersectQuad(float3 ray, Quad quad, float* out_distance) {
     return false;
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
+__global__ void Kernel(uchar4* dst, int width, int height, Quad** devicePointers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     // Invert Y because OpenGL
     int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
@@ -97,13 +90,11 @@ __global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers
             (tMaxZ - (int)tMaxZ) * 16,
         };
 
-        if (devPtrOffset >= DEVICE_PTRS_COUNT) break;
-
-        void** ptr = devicePointers + devPtrOffset;
+        if (devPtrOffset >= DEVICE_PTRS_COUNT - 4) break;
 
         for (int i = 0; i < 4; i++) {
             // Buffers in RenderChunk
-            Quad* buffer = (Quad*)ptr[i];
+            Quad* buffer = devicePointers[devPtrOffset + i];
             if (buffer) {
                 for (int j = 0; j < arraySizes[devPtrOffset + i]; j++) {
                     // Quads in buffer
@@ -117,13 +108,10 @@ __global__ void Kernel(uchar4* dst, int width, int height, void** devicePointers
                 }
             }
         }
-
-        if (distance != FLT_MAX) break;
-    } while (true);
+    } while (distance != FLT_MAX);
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    //*((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
     *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(val, val, 255, 255);
 }
 
@@ -137,17 +125,17 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     if (kernelOutputBuffer) {
         err = cudaFree(kernelOutputBuffer);
         if (err != cudaSuccess) {
-            Log(env, std::string("cudaFree failed: ") + std::to_string(err));
+            Log(env, std::string("Error during cudaFree, error code ") + std::to_string(err) + std::string(": ") + std::string(": ") + cudaGetErrorString(err));
         }
     }
 
     err = cudaMallocPitch((void**)&kernelOutputBuffer, &g_bufferPitch, g_screenWidth * sizeof(uchar4), g_screenHeight * sizeof(uchar4));
     if (err != cudaSuccess) {
-        Log(env, std::string("cudaMalloc failed: ") + std::to_string(err));
+        Log(env, std::string("Error during cudaMallocPitch, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
 }
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity) {
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);

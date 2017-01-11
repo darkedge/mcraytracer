@@ -88,12 +88,29 @@ void Log(JNIEnv* env, const std::string& stdstr) {
     env->CallVoidMethod(jni_logger, jni_info, str);
 }
 
+// Used in the kernel
+static void* devicePointers[DEVICE_PTRS_COUNT];
+static int arraySizes[DEVICE_PTRS_COUNT];
+static Viewport viewport;
+static Quad** cudaDevicePointers;
+static int* cudaArraySizes;
+
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
         Log(env, "Could not load OpenGL functions!");
     }
     CacheJNI(env);
     Log(env, "Init");
+
+    cudaError err;
+    err = cudaMalloc((void**)&cudaDevicePointers, sizeof(devicePointers));
+    if (err != cudaSuccess) {
+        Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+    err = cudaMalloc((void**)&cudaArraySizes, sizeof(arraySizes));
+    if (err != cudaSuccess) {
+        Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
 }
 
 void Destroy(JNIEnv* env) {
@@ -102,7 +119,7 @@ void Destroy(JNIEnv* env) {
     if (gfxResource) {
         cudaError_t err = cudaGraphicsUnregisterResource(gfxResource);
         if (err != cudaSuccess) {
-            Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err));
+            Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
         }
         gfxResource = 0;
     }
@@ -135,7 +152,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
             cudaGraphicsUnmapResources(1, &gfxResource);
             err = cudaGraphicsUnregisterResource(gfxResource);
             if (err != cudaSuccess) {
-                Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err));
+                Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
             }
         }
 
@@ -161,7 +178,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
         // Register CUDA resource
         err = cudaGraphicsGLRegisterImage(&gfxResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
         if (err != cudaSuccess) {
-            Log(env, std::string("cudaGraphicsGLRegisterImage failed: ") + std::to_string(err));
+            Log(env, std::string("cudaGraphicsGLRegisterImage failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
         }
 
         cudaGraphicsMapResources(1, &gfxResource);
@@ -185,11 +202,6 @@ static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every
 static std::vector<GfxRes2DevPtr> translations;
 static float3 viewEntity;
 
-// Used in the kernel
-static void* devicePointers[DEVICE_PTRS_COUNT];
-static int arraySizes[DEVICE_PTRS_COUNT];
-static Viewport viewport;
-
 jint Raytrace(JNIEnv* env) {
     // Clear kernel buffers
     memset(devicePointers, 0, sizeof(devicePointers));
@@ -199,7 +211,7 @@ jint Raytrace(JNIEnv* env) {
     // Map all resources
     err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
     if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err));
+        Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
     
     // Update device pointers
@@ -209,19 +221,27 @@ jint Raytrace(JNIEnv* env) {
         size_t bufferSize;
         size_t idx = t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i;
         if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointers[idx], &bufferSize, frameResources[i])) != cudaSuccess) {
-            Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err));
+            Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
             continue;
         }
         assert(bufferSize >= t.count * VERTEX_SIZE_BYTES);
-        arraySizes[idx] = t.count;
+        arraySizes[idx] = t.count / 4;
     }
 
-    rtRaytrace(env, gfxResource, texHeight, devicePointers, arraySizes, viewport, viewEntity);
+    err = cudaMemcpy(cudaDevicePointers, devicePointers, sizeof(devicePointers), cudaMemcpyDefault);
+    if (err != cudaSuccess) {
+        Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+    err = cudaMemcpy(cudaArraySizes, arraySizes, sizeof(arraySizes), cudaMemcpyDefault);
+    if (err != cudaSuccess) {
+        Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+    rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity);
 
     // Unmap all resources
     err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
     if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err));
+        Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
 
     // Clear per-frame data
@@ -263,8 +283,9 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
         // TODO: Unregister buffer on destroy using cudaGraphicsUnregisterResource
         cudaGraphicsResource* dst = 0;
         cudaError err = cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly);
-        assert(err == cudaSuccess);
-        assert(dst);
+        if (err != cudaSuccess) {
+            Log(env, std::string("Error during cudaGraphicsGLRegisterBuffer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+        }
         allResources[glBufferId] = dst;
     }
 
@@ -286,7 +307,6 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.
-void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
-    env;
+void SetViewEntity(JNIEnv*, jdouble x, jdouble y, jdouble z) {
     viewEntity = float3{(float)x, (float)y, (float)z};
 }
