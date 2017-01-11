@@ -10,9 +10,7 @@
 
 // sizeof(Vertex) should be VERTEX_SIZE_BYTES
 struct Vertex {
-    float x;
-    float y;
-    float z;
+    float3 pos;
     unsigned char rgba[4];
     float u0;
     float v0;

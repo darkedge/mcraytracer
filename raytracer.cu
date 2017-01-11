@@ -12,23 +12,43 @@ __device__ float IntBound(float s, float ds) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
-__device__ bool IntersectQuad(float3 ray, Quad quad, float* out_distance) {
-    return false;
+__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
+    Vertex* v0 = &quad->vertices[0];
+    Vertex* v1 = &quad->vertices[0];
+    Vertex* v2 = &quad->vertices[0];
+    //Vertex* v0 = &quad->vertices[0];
+
+    // Get normal
+    float3 normal = normalize(cross(v2->pos - v1->pos, v0->pos - v1->pos));
+    float denom = dot(normal, *dir);
+    float t = -1.0f;
+    if (abs(denom) > 0.0001f) { // TODO: tweak epsilon
+        t = dot(v0->pos - *origin, normal) / denom;
+        *out_distance = t;
+    }
+
+    return t > 0.0001f;
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, Quad** devicePointers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
+__global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     // Invert Y because OpenGL
     int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
 
-    float u = x / (float)width;
-    float v = y / (float)height;
+    {
+        int offset = (y * bufferPitch) + x * sizeof(uchar4);
+        if (offset >= bufferPitch * height) return;
+        dst = (uchar4*)(((char*)dst) + offset);
+    }
 
-    int offset = (y * bufferPitch) + x * sizeof(uchar4);
-    if (offset >= bufferPitch * height) return;
+    float3 direction;
+    {
+        float u = x / (float)width;
+        float v = y / (float)height;
 
-    float3 point = (lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v)) * 0.5f;
-    float3 direction = normalize(point - viewport.origin);
+        float3 point = (lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v)) * 0.5f;
+        direction = normalize(point - viewport.origin);
+    }
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
@@ -46,39 +66,34 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** devicePointers
     float tMaxY = IntBound(origin.y, direction.y);
     float tMaxZ = IntBound(origin.z, direction.z);
 
-    // TODO: Save registers
-    float tDeltaX = (float)stepX / direction.x; // length of v between two YZ-boundaries
-    float tDeltaY = (float)stepY / direction.y; // length of v between two XZ-boundaries
-    float tDeltaZ = (float)stepZ / direction.z; // length of v between two XY-boundaries
-
-    // Range of 5 renderChunks for now
+    unsigned char checks = 0;
     do {
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
                 if (renderChunkX < 0 || renderChunkX >= GRID_DIM) break;
-                tMaxX += tDeltaX;
+                tMaxX += (float)stepX / direction.x;
             }
             else {
                 renderChunkZ += stepZ;
                 if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += tDeltaZ;
+                tMaxZ += (float)stepZ / direction.z;
             }
         }
         else {
             if (tMaxY < tMaxZ) {
                 renderChunkY += stepY;
                 if (renderChunkY < 0 || renderChunkY >= 16) break;
-                tMaxY += tDeltaY;
+                tMaxY += (float)stepY / direction.y;
             }
             else {
                 renderChunkZ += stepZ;
                 if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += tDeltaZ;
+                tMaxZ += (float)stepZ / direction.z;
             }
         }
 
-        int devPtrOffset =
+        int renderChunk =
             renderChunkX * GRID_DIM * 16 * 4 +
             renderChunkZ * 16 * 4 +
             renderChunkY * 4;
@@ -90,21 +105,24 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** devicePointers
             (tMaxZ - (int)tMaxZ) * 16,
         };
 
-        if (devPtrOffset >= DEVICE_PTRS_COUNT - 4) break;
+        if (renderChunk >= DEVICE_PTRS_COUNT - 4) break;
 
-        for (int i = 0; i < 4; i++) {
+        for (int pass = 0; pass < 4; pass++) {
             // Buffers in RenderChunk
-            Quad* buffer = devicePointers[devPtrOffset + i];
+            Quad* buffer = vertexBuffers[renderChunk + pass];
             if (buffer) {
-                for (int j = 0; j < arraySizes[devPtrOffset + i]; j++) {
+                for (int j = 0; j < arraySizes[renderChunk + pass]; j++) {
+                    if(checks < 255) checks++;
+                    #if 1
                     // Quads in buffer
-                    float dist;
-                    if (IntersectQuad(ray, buffer[j], &dist)) {
+                    float dist = FLT_MAX;
+                    if (IntersectQuad(&ray, &direction, &buffer[j], &dist)) {
                         if (dist < distance) {
                             // TODO: Remember quad for texturing etc
                             distance = dist;
                         }
                     }
+                    #endif
                 }
             }
         }
@@ -112,7 +130,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** devicePointers
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    *((uchar4*)(((uchar1*)dst) + offset)) = make_uchar4(val, val, 255, 255);
+    *dst = make_uchar4(val, checks, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
