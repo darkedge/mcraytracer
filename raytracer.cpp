@@ -203,29 +203,36 @@ static std::vector<GfxRes2DevPtr> translations;
 static float3 viewEntity;
 
 jint Raytrace(JNIEnv* env) {
+    cudaError err;
+
     // Clear kernel buffers
     memset(devicePointers, 0, sizeof(devicePointers));
     memset(arraySizes, 0, sizeof(arraySizes));
 
-    cudaError err;
-    // Map all resources
-    err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
-    if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-    
-    // Update device pointers
-    for (int i = 0; i < translations.size(); i++) {
-        GfxRes2DevPtr& t = translations[i];
-
-        size_t bufferSize;
-        size_t idx = t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i;
-        if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointers[idx], &bufferSize, frameResources[i])) != cudaSuccess) {
-            Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-            continue;
+    if (!frameResources.empty()) {
+        // Map all resources
+        err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
+        if (err != cudaSuccess) {
+            Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
         }
-        assert(bufferSize >= t.count * VERTEX_SIZE_BYTES);
-        arraySizes[idx] = t.count / 4;
+    
+        // Update device pointers
+        for (int i = 0; i < translations.size(); i++) {
+            GfxRes2DevPtr& t = translations[i];
+
+            size_t bufferSize;
+            size_t idx = t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i;
+            void* devicePointer;
+            if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointer, &bufferSize, frameResources[i])) != cudaSuccess) {
+                Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+                continue;
+            }
+            // FIXME: Some buffers do not pass this check for some reason
+            if (bufferSize >= t.count * VERTEX_SIZE_BYTES) {
+                devicePointers[idx] = devicePointer;
+                arraySizes[idx] = t.count / 4;
+            }
+        }
     }
 
     err = cudaMemcpy(cudaDevicePointers, devicePointers, sizeof(devicePointers), cudaMemcpyDefault);
@@ -236,17 +243,20 @@ jint Raytrace(JNIEnv* env) {
     if (err != cudaSuccess) {
         Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
+    
     rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity);
 
-    // Unmap all resources
-    err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
-    if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
+    if (!frameResources.empty()) {
+        // Unmap all resources
+        err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
+        if (err != cudaSuccess) {
+            Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+        }
 
-    // Clear per-frame data
-    frameResources.clear();
-    translations.clear();
+        // Clear per-frame data
+        frameResources.clear();
+        translations.clear();
+    }
 
     return texture;
 }
