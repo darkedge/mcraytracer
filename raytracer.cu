@@ -8,8 +8,10 @@ static int g_screenWidth;
 static int g_screenHeight;
 static size_t g_bufferPitch;
 
+// fractional part of float, for example, Frac(1.3) = 0.3, Frac(-1.7)=0.3
 __device__ float IntBound(float s, float ds) {
-    return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
+    //return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
+    return (ds > 0 ? s - floor(s) : s - ceil(s)) / abs(ds);
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
@@ -41,14 +43,16 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         dst = (uchar4*)(((char*)dst) + offset);
     }
 
-    float3 direction;
-    {
-        float u = x / (float)width;
-        float v = y / (float)height;
+    float u = x / (float)width;
+    float v = y / (float)height;
 
-        float3 point = (lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v)) * 0.5f;
+    float3 direction;
+    
+        
+
+        float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
         direction = normalize(point - viewport.origin);
-    }
+    
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
@@ -65,6 +69,10 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float tMaxX = IntBound(origin.x, direction.x);
     float tMaxY = IntBound(origin.y, direction.y);
     float tMaxZ = IntBound(origin.z, direction.z);
+
+    float deltaX = (float)stepX / direction.x;
+    float deltaY = (float)stepY / direction.y;
+    float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
     do {
@@ -101,27 +109,28 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             }
         }
 
+        #define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
-                if (renderChunkX < 0 || renderChunkX >= GRID_DIM) break;
-                tMaxX += (float)stepX / direction.x;
+                if (renderChunkX < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkX >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxX += deltaX;
             }
             else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += (float)stepZ / direction.z;
+                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxZ += deltaZ;
             }
         } else {
             if (tMaxY < tMaxZ) {
                 renderChunkY += stepY;
                 if (renderChunkY < 0 || renderChunkY >= 16) break;
-                tMaxY += (float)stepY / direction.y;
+                tMaxY += deltaY;
             }
             else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ < 0 || renderChunkZ >= GRID_DIM) break;
-                tMaxZ += (float)stepZ / direction.z;
+                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxZ += deltaZ;
             }
         }
     } while (distance == FLT_MAX);
@@ -129,6 +138,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
     *dst = make_uchar4(val, checks, 255, 255);
+    //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    //*dst = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
