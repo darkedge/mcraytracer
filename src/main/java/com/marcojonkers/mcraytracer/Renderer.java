@@ -1,14 +1,10 @@
 package com.marcojonkers.mcraytracer;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.renderer.Matrix4f;
-import net.minecraft.client.renderer.ViewFrustum;
-import net.minecraft.client.renderer.chunk.IRenderChunkFactory;
-import net.minecraft.client.renderer.chunk.VboChunkFactory;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.MathHelper;
 import org.lwjgl.util.glu.Project;
+import org.lwjgl.util.vector.Matrix4f;
 import org.lwjgl.util.vector.Vector3f;
 
 import java.nio.ByteBuffer;
@@ -31,7 +27,7 @@ public class Renderer {
         float temp3 = top - bottom;
         float temp4 = zfar - znear;
 
-        return new Matrix4f(new float[]{
+        return new net.minecraft.client.renderer.Matrix4f(new float[]{
                 temp / temp2,
                 0.0f,
                 0.0f,
@@ -74,6 +70,17 @@ public class Renderer {
         float farPlaneDistance = (float) (this.mc.gameSettings.renderDistanceChunks * 16);
         Matrix4f projection = glhPerspectivef2(fov, (float) this.mc.displayWidth / (float) this.mc.displayHeight, 0.05F, farPlaneDistance * MathHelper.SQRT_2);
 
+        // Pass inverse projection matrix to C++
+        // Java matrix is column major
+        // We transpose to row major because then we can just use dot products in the kernel
+        FloatBuffer projBuffer = ByteBuffer.allocateDirect(16 * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        Matrix4f invProj = Matrix4f.invert(projection, null);
+        invProj.storeTranspose(projBuffer);
+        projBuffer.position(0);
+        raytracer.setInverseProjectionMatrix(projBuffer);
+
         // Build view matrix
 
         // TODO: Lots of stuff (bobbing, portal, hurting, sleeping, 3rd person, etc etc)
@@ -90,12 +97,19 @@ public class Renderer {
         view.rotate((float) Math.toRadians(yaw), new Vector3f(0.0f, 1.0f, 0.0f));
         view.translate(new Vector3f(0.0f, -entity.getEyeHeight(), 0.0f));
 
-        FloatBuffer modelMatrix = FloatBuffer.allocate(16);
-        view.store(modelMatrix);
-        modelMatrix.position(0);
-        FloatBuffer projMatrix = FloatBuffer.allocate(16);
-        projection.store(projMatrix);
-        projMatrix.position(0);
+        // Pass inverse view matrix to C++
+        FloatBuffer viewBuffer = ByteBuffer.allocateDirect(16 * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        Matrix4f invView = Matrix4f.invert(view, null);
+        invView.storeTranspose(viewBuffer);
+        viewBuffer.position(0);
+        raytracer.setInverseViewMatrix(viewBuffer);
+
+        view.store(viewBuffer);
+        viewBuffer.position(0);
+        projection.store(projBuffer);
+        projBuffer.position(0);
         IntBuffer viewport = IntBuffer.allocate(4);
         viewport.put(new int[]{0, 0, this.mc.displayWidth, this.mc.displayHeight});
         viewport.position(0);
@@ -103,11 +117,11 @@ public class Renderer {
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
         // gluUnProject does not advance any buffer positions
-        Project.gluUnProject(0.0f, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos);
+        Project.gluUnProject(0.0f, 0.0f, 0.0f, viewBuffer, projBuffer, viewport, obj_pos);
         obj_pos.position(obj_pos.position() + 3);
-        Project.gluUnProject(this.mc.displayWidth, 0.0f, 0.0f, modelMatrix, projMatrix, viewport, obj_pos);
+        Project.gluUnProject(this.mc.displayWidth, 0.0f, 0.0f, viewBuffer, projBuffer, viewport, obj_pos);
         obj_pos.position(obj_pos.position() + 3);
-        Project.gluUnProject(0.0f, this.mc.displayHeight, 0.0f, modelMatrix, projMatrix, viewport, obj_pos);
+        Project.gluUnProject(0.0f, this.mc.displayHeight, 0.0f, viewBuffer, projBuffer, viewport, obj_pos);
         obj_pos.position(obj_pos.position() + 3);
         obj_pos.put(fov);
 

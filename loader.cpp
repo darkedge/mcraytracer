@@ -37,6 +37,12 @@ typedef RT_SET_VERTEX_BUFFER(SetVertexBufferFunc);
 #define RT_SET_VIEW_ENTITY(name) void name(JNIEnv*, jdouble, jdouble, jdouble)
 typedef RT_SET_VIEW_ENTITY(SetViewEntityFunc);
 
+#define RT_SET_INVERSE_VIEW_MATRIX(name) void name(JNIEnv*, jobject)
+typedef RT_SET_INVERSE_VIEW_MATRIX(SetInverseViewMatrixFunc);
+
+#define RT_SET_INVERSE_PROJECTION_MATRIX(name) void name(JNIEnv*, jobject)
+typedef RT_SET_INVERSE_PROJECTION_MATRIX(SetInverseProjectionMatrixFunc);
+
 
 struct Raytracer {
     InitFunc* Init;
@@ -46,6 +52,8 @@ struct Raytracer {
     SetViewingPlaneFunc* SetViewingPlane;
     SetVertexBufferFunc* SetVertexBuffer;
     SetViewEntityFunc* SetViewEntity;
+    SetInverseViewMatrixFunc* SetInverseViewMatrix;
+    SetInverseProjectionMatrixFunc* SetInverseProjectionMatrix;
 
     FILETIME DLLLastWriteTime;
     bool valid;
@@ -114,6 +122,8 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.SetViewingPlane = (SetViewingPlaneFunc*)GetProcAddress(raytracer.dll, "SetViewingPlane");
             raytracer.SetVertexBuffer = (SetVertexBufferFunc*)GetProcAddress(raytracer.dll, "SetVertexBuffer");
             raytracer.SetViewEntity = (SetViewEntityFunc*)GetProcAddress(raytracer.dll, "SetViewEntity");
+            raytracer.SetInverseViewMatrix = (SetInverseViewMatrixFunc*)GetProcAddress(raytracer.dll, "SetInverseViewMatrix");
+            raytracer.SetInverseProjectionMatrix = (SetInverseProjectionMatrixFunc*)GetProcAddress(raytracer.dll, "SetInverseProjectionMatrix");
 
             raytracer.valid = 
                 raytracer.Init &&
@@ -122,7 +132,9 @@ static Raytracer Load(JNIEnv* env) {
                 raytracer.Raytrace &&
                 raytracer.SetViewingPlane &&
                 raytracer.SetVertexBuffer &&
-                raytracer.SetViewEntity;
+                raytracer.SetViewEntity &&
+                raytracer.SetInverseViewMatrix &&
+                raytracer.SetInverseProjectionMatrix;
 
             if (raytracer.valid) {
                 Log(env, "Successfully (re)loaded Raytracer DLL.");
@@ -141,6 +153,8 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.SetViewingPlane = NULL;
         raytracer.SetVertexBuffer = NULL;
         raytracer.SetViewEntity = NULL;
+        raytracer.SetInverseViewMatrix = NULL;
+        raytracer.SetInverseProjectionMatrix = NULL;
     }
 
     return raytracer;
@@ -216,6 +230,16 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuff
 }
 
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
-(JNIEnv *env, jobject, jdouble x, jdouble y, jdouble z) {
+(JNIEnv* env, jobject, jdouble x, jdouble y, jdouble z) {
     g_raytracer.SetViewEntity(env, x, y, z);
+}
+
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseProjectionMatrix
+(JNIEnv* env, jobject, jobject arr) {
+    g_raytracer.SetInverseProjectionMatrix(env, arr);
+}
+
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseViewMatrix
+(JNIEnv* env, jobject, jobject arr) {
+    g_raytracer.SetInverseViewMatrix(env, arr);
 }

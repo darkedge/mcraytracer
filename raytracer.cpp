@@ -41,9 +41,11 @@ extern "C" {
     MJ_EXPORT void Destroy(JNIEnv*);
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
-    MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject, jobject);
+    MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
     MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
+    MJ_EXPORT void SetInverseViewMatrix(JNIEnv*, jobject);
+    MJ_EXPORT void SetInverseProjectionMatrix(JNIEnv*, jobject);
 }
 
 static jfieldID jni_VertexBuffer_count;
@@ -201,6 +203,8 @@ static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
 static std::vector<GfxRes2DevPtr> translations;
 static float3 viewEntity;
+static mat4 viewMatrixInv;
+static mat4 projMatrixInv;
 
 jint Raytrace(JNIEnv* env) {
     cudaError err;
@@ -244,7 +248,7 @@ jint Raytrace(JNIEnv* env) {
         Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
     
-    rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity);
+    rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity, viewMatrixInv, projMatrixInv);
 
     if (!frameResources.empty()) {
         // Unmap all resources
@@ -261,7 +265,25 @@ jint Raytrace(JNIEnv* env) {
     return texture;
 }
 
-void SetViewingPlane(JNIEnv* env, jobject, jobject arr) {
+void SetInverseViewMatrix(JNIEnv* env, jobject arr) {
+    jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
+    //memcpy(&viewMatrixInv, buffer, sizeof(viewMatrixInv));
+    viewMatrixInv.row0 = float4{ buffer[0], buffer[1], buffer[2], buffer[3] };
+    viewMatrixInv.row1 = float4{ buffer[4], buffer[5], buffer[6], buffer[7] };
+    viewMatrixInv.row2 = float4{ buffer[8], buffer[9], buffer[10], buffer[11] };
+    viewMatrixInv.row3 = float4{ buffer[12], buffer[13], buffer[14], buffer[15] };
+}
+
+void SetInverseProjectionMatrix(JNIEnv* env, jobject arr) {
+    jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
+    //memcpy(&projMatrixInv, buffer, sizeof(projMatrixInv));
+    projMatrixInv.row0 = float4{ buffer[0], buffer[1], buffer[2], buffer[3] };
+    projMatrixInv.row1 = float4{ buffer[4], buffer[5], buffer[6], buffer[7] };
+    projMatrixInv.row2 = float4{ buffer[8], buffer[9], buffer[10], buffer[11] };
+    projMatrixInv.row3 = float4{ buffer[12], buffer[13], buffer[14], buffer[15] };
+}
+
+void SetViewingPlane(JNIEnv* env, jobject arr) {
     jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
     viewport.p0 = float3{buffer[0], buffer[1], buffer[2]};
     viewport.p1 = float3{buffer[3], buffer[4], buffer[5]};

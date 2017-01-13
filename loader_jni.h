@@ -55,6 +55,22 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuff
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
   (JNIEnv *, jobject, jdouble, jdouble, jdouble);
 
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    setInverseProjectionMatrix
+ * Signature: (Ljava/nio/FloatBuffer;)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseProjectionMatrix
+  (JNIEnv *, jobject, jobject);
+
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    setInverseViewMatrix
+ * Signature: (Ljava/nio/FloatBuffer;)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseViewMatrix
+  (JNIEnv *, jobject, jobject);
+
 #ifdef __cplusplus
 }
 #endif

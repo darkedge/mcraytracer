@@ -9,9 +9,16 @@ static int g_screenHeight;
 static size_t g_bufferPitch;
 
 // fractional part of float, for example, Frac(1.3) = 0.3, Frac(-1.7)=0.3
-__device__ float IntBound(float s, float ds) {
+// Calculates the value of t (absolute) for a ray starting from origin
+// to cross the first boundary with direction.
+__device__ float IntBound(float origin, float direction) {
     //return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
-    return (ds > 0 ? s - floor(s) : s - ceil(s)) / abs(ds);
+    //return (ds > 0 ? s - floor(s) : s - ceil(s)) / abs(ds);
+    if (direction > 0) {
+        return (1 - fracf(origin / 16.0f)) * 16.0f / direction;
+    } else {
+        return ((origin / 16.0f) - floor(origin / 16.0f)) * 16.0f / direction;
+    }
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
@@ -32,7 +39,16 @@ __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* ou
     return t > 0.0001f;
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
+__device__ float4 Mul(mat4 mat, float4 vec) {
+    return float4{
+        dot(mat.row0, vec),
+        dot(mat.row1, vec),
+        dot(mat.row2, vec),
+        dot(mat.row3, vec)
+    };
+}
+
+__global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch, mat4 invViewMatrix, mat4 invProjMatrix) {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     // Invert Y because OpenGL
     int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
@@ -43,22 +59,24 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         dst = (uchar4*)(((char*)dst) + offset);
     }
 
-    float u = x / (float)width;
-    float v = y / (float)height;
+    float u = 2.0f * x / (float)width - 1.0f;
+    float v = 2.0f * y / (float)height - 1.0f;
 
-    float3 direction;
+    float4 ray_eye = Mul(invProjMatrix, float4{u, v, -1.0f, 1.0f});
+    ray_eye = Mul(invViewMatrix, float4{ray_eye.x, ray_eye.y, -1.0f, 0.0f});
+    float3 direction = normalize(float3{ray_eye.x, ray_eye.y, ray_eye.z});
     
         
 
-        float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
-        direction = normalize(point - viewport.origin);
+        //float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
+        //direction = normalize(point - viewport.origin);
     
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
 
     int renderChunkX = MAX_RENDER_DISTANCE;
-    int renderChunkY = floor(origin.y) / 16;
+    int renderChunkY = (int)floor(origin.y / 16.0f);
     int renderChunkZ = MAX_RENDER_DISTANCE;
 
     // = (-1/1) signs of vector dir
@@ -70,9 +88,10 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float tMaxY = IntBound(origin.y, direction.y);
     float tMaxZ = IntBound(origin.z, direction.z);
 
-    float deltaX = (float)stepX / direction.x;
-    float deltaY = (float)stepY / direction.y;
-    float deltaZ = (float)stepZ / direction.z;
+    // All positive values
+    float deltaX = (float)stepX / direction.x * 16.0f;
+    float deltaY = (float)stepY / direction.y * 16.0f;
+    float deltaZ = (float)stepZ / direction.z * 16.0f;
 
     unsigned char checks = 0;
     do {
@@ -83,12 +102,12 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
         // Create the ray used for intersection
         float3 ray{
-            (tMaxX - (int)tMaxX) * 16,
-            (tMaxY - (int)tMaxY) * 16,
-            (tMaxZ - (int)tMaxZ) * 16,
+            (origin.x + tMaxX * direction.x),
+            (origin.y + tMaxY * direction.y),
+            (origin.z + tMaxZ * direction.z)
         };
 
-        if (checks < 255) checks += 5;
+        if (checks < 255) checks += 20;
 
         for (int pass = 0; pass < 4; pass++) {
             // Buffers in RenderChunk
@@ -109,7 +128,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             }
         }
 
-        #define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
+        #define TODO_RENDER_DISTANCE 2
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
@@ -137,9 +156,12 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    *dst = make_uchar4(val, checks, 255, 255);
-    //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
-    //*dst = make_uchar4(u * 256.0f, v * 256.0f, 255.0f, 255.0f);
+    //*dst = make_uchar4(val, checks, 255, 255);
+    *dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
+    //*dst = make_uchar4(u * 256, v * 256, 255, 255);
+    //*dst = make_uchar4(u * 127 + 127, v * 127 + 127, 255, 255);
+    //*dst = make_uchar4(bar.x * 127 + 127, bar.y * 127 + 127, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
@@ -162,14 +184,14 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     }
 }
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity) {
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
 
     // Kernel call
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch, invViewMatrix, invProjMatrix);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;

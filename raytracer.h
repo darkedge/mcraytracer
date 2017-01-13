@@ -29,7 +29,14 @@ struct Viewport {
     float3 p2; // Bottom-left
 };
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity);
+struct mat4 {
+    float4 row0;
+    float4 row1;
+    float4 row2;
+    float4 row3;
+};
+
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix);
 void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);
