@@ -35,13 +35,13 @@ __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* ou
     return t > 0.0001f;
 }
 
-__device__ float4 Mul(mat4 mat, float4 vec) {
-    return float4{
+static __inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
+    return make_float4(
         dot(mat.row0, vec),
         dot(mat.row1, vec),
         dot(mat.row2, vec),
         dot(mat.row3, vec)
-    };
+    );
 }
 
 __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch, mat4 invViewMatrix, mat4 invProjMatrix) {
@@ -58,11 +58,11 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float u = 2.0f * x / (float)width - 1.0f;
     float v = 2.0f * y / (float)height - 1.0f;
 
-    float4 ray_eye = Mul(invProjMatrix, float4{u, v, -1.0f, 1.0f});
-    ray_eye = Mul(invViewMatrix, float4{ray_eye.x, ray_eye.y, -1.0f, 0.0f});
-    float3 direction = normalize(float3{ray_eye.x, ray_eye.y, ray_eye.z});
+    float4 ray_eye = Mul(invProjMatrix, make_float4(u, v, -1.0f, 1.0f));
+    ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
+    float3 direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
     
-        
+        #if 0
 
         //float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
         //direction = normalize(point - viewport.origin);
@@ -152,8 +152,10 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    *dst = make_uchar4(val, checks, 255, 255);
-    //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    #endif
+
+    //*dst = make_uchar4(val, checks, 255, 255);
+    *dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
     //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
     //*dst = make_uchar4(u * 256, v * 256, 255, 255);
     //*dst = make_uchar4(u * 127 + 127, v * 127 + 127, 255, 255);
