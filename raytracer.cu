@@ -12,13 +12,9 @@ static size_t g_bufferPitch;
 // Calculates the value of t (absolute) for a ray starting from origin
 // to cross the first boundary with direction.
 __device__ float IntBound(float origin, float direction) {
-    //return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
-    //return (ds > 0 ? s - floor(s) : s - ceil(s)) / abs(ds);
-    if (direction > 0) {
-        return (1 - fracf(origin / 16.0f)) * 16.0f / direction;
-    } else {
-        return ((origin / 16.0f) - floor(origin / 16.0f)) * 16.0f / direction;
-    }
+    float s = origin / 16.0f;
+    float ds = direction / 16.0f;
+    return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
@@ -107,7 +103,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             (origin.z + tMaxZ * direction.z)
         };
 
-        if (checks < 255) checks += 20;
+        if (checks < 255) checks += 5;
 
         for (int pass = 0; pass < 4; pass++) {
             // Buffers in RenderChunk
@@ -128,16 +124,16 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             }
         }
 
-        #define TODO_RENDER_DISTANCE 2
+        #define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
-                if (renderChunkX < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkX >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                if (renderChunkX < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkX > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxX += deltaX;
             }
             else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += deltaZ;
             }
         } else {
@@ -148,7 +144,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             }
             else {
                 renderChunkZ += stepZ;
-                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ >= MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += deltaZ;
             }
         }
@@ -156,8 +152,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    //*dst = make_uchar4(val, checks, 255, 255);
-    *dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    *dst = make_uchar4(val, checks, 255, 255);
+    //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
     //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
     //*dst = make_uchar4(u * 256, v * 256, 255, 255);
     //*dst = make_uchar4(u * 127 + 127, v * 127 + 127, 255, 255);
