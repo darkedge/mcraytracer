@@ -320,3 +320,12 @@ __pycache__/
 build/
 run/
 .gradle/
+
+# LaTeX
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.pdf
+*.run.xml
+*.synctex.gz
