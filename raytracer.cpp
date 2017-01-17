@@ -91,8 +91,8 @@ void Log(JNIEnv* env, const std::string& stdstr) {
 }
 
 // Used in the kernel
-static void* devicePointers[DEVICE_PTRS_COUNT];
-static int arraySizes[DEVICE_PTRS_COUNT];
+static void** devicePointers;
+static int* arraySizes;
 static Viewport viewport;
 static Quad** cudaDevicePointers;
 static int* cudaArraySizes;
@@ -105,13 +105,21 @@ void Init(JNIEnv* env) {
     Log(env, "Init");
 
     cudaError err;
-    err = cudaMalloc((void**)&cudaDevicePointers, sizeof(devicePointers));
+    err = cudaHostAlloc((void**)&devicePointers, DEVICE_PTRS_COUNT * sizeof(void*), cudaHostAllocMapped);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
-    err = cudaMalloc((void**)&cudaArraySizes, sizeof(arraySizes));
+    err = cudaHostAlloc(&arraySizes, DEVICE_PTRS_COUNT * sizeof(int), cudaHostAllocMapped);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+    err = cudaHostGetDevicePointer(&cudaDevicePointers, devicePointers, 0);
+    if (err != cudaSuccess) {
+        Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+    err = cudaHostGetDevicePointer(&cudaArraySizes, arraySizes, 0);
+    if (err != cudaSuccess) {
+        Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
 }
 
@@ -129,6 +137,16 @@ void Destroy(JNIEnv* env) {
     if (texture) {
         glDeleteTextures(1, &texture);
         texture = 0;
+    }
+
+    if (devicePointers) {
+        cudaFreeHost(devicePointers);
+        devicePointers = 0;
+    }
+
+    if (arraySizes) {
+        cudaFreeHost(arraySizes);
+        arraySizes = 0;
     }
 }
 
@@ -237,15 +255,6 @@ jint Raytrace(JNIEnv* env) {
                 arraySizes[idx] = t.count / 4;
             }
         }
-    }
-
-    err = cudaMemcpy(cudaDevicePointers, devicePointers, sizeof(devicePointers), cudaMemcpyDefault);
-    if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-    err = cudaMemcpy(cudaArraySizes, arraySizes, sizeof(arraySizes), cudaMemcpyDefault);
-    if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaMemcpy, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
     
     rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity, viewMatrixInv, projMatrixInv);
