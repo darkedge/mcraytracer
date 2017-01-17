@@ -72,9 +72,9 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     float distance = FLT_MAX;
 
-    int renderChunkX = MAX_RENDER_DISTANCE;
-    int renderChunkY = (int)floor(origin.y / 16.0f);
-    int renderChunkZ = MAX_RENDER_DISTANCE;
+    char renderChunkX = MAX_RENDER_DISTANCE;
+    char renderChunkY = (unsigned char)floor(origin.y / 16.0f);
+    char renderChunkZ = MAX_RENDER_DISTANCE;
 
     // = (-1/1) signs of vector dir
     int stepX = (direction.x < 0) ? -1 : 1;

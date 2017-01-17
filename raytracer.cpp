@@ -275,21 +275,11 @@ jint Raytrace(JNIEnv* env) {
 }
 
 void SetInverseViewMatrix(JNIEnv* env, jobject arr) {
-    jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
-    //memcpy(&viewMatrixInv, buffer, sizeof(viewMatrixInv));
-    viewMatrixInv.row0 = float4{ buffer[0], buffer[1], buffer[2], buffer[3] };
-    viewMatrixInv.row1 = float4{ buffer[4], buffer[5], buffer[6], buffer[7] };
-    viewMatrixInv.row2 = float4{ buffer[8], buffer[9], buffer[10], buffer[11] };
-    viewMatrixInv.row3 = float4{ buffer[12], buffer[13], buffer[14], buffer[15] };
+    memcpy(&viewMatrixInv, env->GetDirectBufferAddress(arr), sizeof(viewMatrixInv));
 }
 
 void SetInverseProjectionMatrix(JNIEnv* env, jobject arr) {
-    jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
-    //memcpy(&projMatrixInv, buffer, sizeof(projMatrixInv));
-    projMatrixInv.row0 = float4{ buffer[0], buffer[1], buffer[2], buffer[3] };
-    projMatrixInv.row1 = float4{ buffer[4], buffer[5], buffer[6], buffer[7] };
-    projMatrixInv.row2 = float4{ buffer[8], buffer[9], buffer[10], buffer[11] };
-    projMatrixInv.row3 = float4{ buffer[12], buffer[13], buffer[14], buffer[15] };
+    memcpy(&projMatrixInv, env->GetDirectBufferAddress(arr), sizeof(projMatrixInv));
 }
 
 void SetViewingPlane(JNIEnv* env, jobject arr) {
@@ -315,7 +305,6 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 
     int glBufferId = env->GetIntField(obj, jni_VertexBuffer_glBufferId);
 
-    chunkX; chunkY; chunkZ; pass; glBufferId;
     if ((glBufferId + 1) > allResources.size()) {
         allResources.resize((glBufferId + 1), NULL);
     }
