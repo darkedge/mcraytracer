@@ -18,18 +18,22 @@ __device__ float IntBound(float origin, float direction) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
-__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
+__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, char y, char z, float* out_distance) {
     Vertex* v0 = &quad->vertices[0];
-    Vertex* v1 = &quad->vertices[0];
-    Vertex* v2 = &quad->vertices[0];
-    //Vertex* v0 = &quad->vertices[0];
+    Vertex* v1 = &quad->vertices[1];
+    Vertex* v2 = &quad->vertices[2];
 
     // Get normal
     float3 normal = normalize(cross(v2->pos - v1->pos, v0->pos - v1->pos));
     float denom = dot(normal, *dir);
     float t = -1.0f;
     if (abs(denom) > 0.0001f) { // TODO: tweak epsilon
-        t = dot(v0->pos - *origin, normal) / denom;
+        float3 bla = make_float3(
+            v0->pos.x + x * 16,
+            v0->pos.y + y * 16,
+            v0->pos.z + z * 16
+        );
+        t = dot(bla - *origin, normal) / denom;
         *out_distance = t;
     }
 
@@ -62,12 +66,6 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float4 ray_eye = Mul(invProjMatrix, make_float4(u, v, -1.0f, 1.0f));
     ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
     float3 direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
-    
-        #if 0
-
-        //float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
-        //direction = normalize(point - viewport.origin);
-    
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
@@ -124,7 +122,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 #endif
         }
 
-        #define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
+#define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
@@ -152,10 +150,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
 
-    #endif
-
-    //*dst = make_uchar4(val, checks, 255, 255);
-    *dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    *dst = make_uchar4(val, checks, 255, 255);
+    //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
     //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
     //*dst = make_uchar4(u * 256, v * 256, 255, 255);
     //*dst = make_uchar4(u * 127 + 127, v * 127 + 127, 255, 255);
