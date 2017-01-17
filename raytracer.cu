@@ -1,7 +1,8 @@
 #include "raytracer.h"
 #include "helper_math.h"
 
-#define BLOCK_SIZE 16     // block size
+// BLOCK_SIZE^2 = max threads per SM / max active blocks
+#define BLOCK_SIZE 8 // JOTARO
 
 static uchar4* kernelOutputBuffer;
 static int g_screenWidth;
