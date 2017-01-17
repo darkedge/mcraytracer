@@ -24,8 +24,9 @@ public class RaytracerRenderList extends ChunkRenderContainer {
     @Override
     public void renderChunkLayer(BlockRenderLayer layer) {
         if (this.initialized) {
+            int i = layer.ordinal();
+            if (i != 0) return;
             for (RenderChunk renderchunk : this.set) {
-                int i = layer.ordinal();
                 VertexBuffer buffer = renderchunk.getVertexBufferByLayer(i);
                 BlockPos pos = renderchunk.getPosition();
                 Raytracer.getRaytracer().setVertexBuffer(pos, i, buffer);

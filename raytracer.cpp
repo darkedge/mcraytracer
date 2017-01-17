@@ -214,7 +214,7 @@ struct GfxRes2DevPtr {
     int x;
     int y;
     int z;
-    int i;
+    //int i;
 };
 
 static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
@@ -243,7 +243,7 @@ jint Raytrace(JNIEnv* env) {
             GfxRes2DevPtr& t = translations[i];
 
             size_t bufferSize;
-            size_t idx = t.x * GRID_DIM * 16 * 4 + t.z * 16 * 4 + t.y * 4 + t.i;
+            size_t idx = t.x * GRID_DIM * 16 + t.z * 16 + t.y;
             void* devicePointer;
             if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointer, &bufferSize, frameResources[i])) != cudaSuccess) {
                 Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
@@ -306,7 +306,8 @@ void SetViewingPlane(JNIEnv* env, jobject arr) {
     viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
 
-void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pass, jobject obj) {
+// Currently only called for the opaque pass
+void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, jobject obj) {
     int count = env->GetIntField(obj, jni_VertexBuffer_count);
 
     // CUDA cannot register empty buffers
@@ -339,7 +340,6 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint pa
 
     GfxRes2DevPtr translation = { 0 };
     translation.count = count;
-    translation.i = pass;
     translation.x = x;
     translation.y = y;
     translation.z = z;

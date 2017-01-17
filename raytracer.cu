@@ -93,36 +93,35 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     unsigned char checks = 0;
     do {
         int renderChunk =
-            renderChunkX * GRID_DIM * 16 * 4 +
-            renderChunkZ * 16 * 4 +
-            renderChunkY * 4;
+            renderChunkX * GRID_DIM * 16 +
+            renderChunkZ * 16 +
+            renderChunkY;
 
-        // Create the ray used for intersection
-        float3 ray{
-            (origin.x + tMaxX * direction.x),
-            (origin.y + tMaxY * direction.y),
-            (origin.z + tMaxZ * direction.z)
-        };
+        // Ray position from [0..16]
+        float rx = (origin.x + tMaxX * direction.x) / 16.0f;
+        float ry = (origin.y + tMaxY * direction.y) / 16.0f;
+        float rz = (origin.z + tMaxZ * direction.z) / 16.0f;
+        float3 ray = make_float3(
+            (rx > 0 ? fracf(rx) : rx - ceilf(rx)) * 16.0f,
+            (ry > 0 ? fracf(ry) : ry - ceilf(ry)) * 16.0f,
+            (rz > 0 ? fracf(rz) : rz - ceilf(rz)) * 16.0f
+        );
 
         if (checks < 255) checks += 5;
 
-        for (int pass = 0; pass < 4; pass++) {
-            // Buffers in RenderChunk
-            Quad* buffer = vertexBuffers[renderChunk + pass];
-            if (buffer) {
-                for (int j = 0; j < arraySizes[renderChunk + pass]; j++) {
-                    // Quads in buffer
-                    float dist = FLT_MAX;
-                    #if 0
-                    if (IntersectQuad(&ray, &direction, &buffer[j], &dist)) {
-                        if (dist < distance) {
-                            // TODO: Remember quad for texturing etc
-                            distance = dist;
-                        }
-                    }
-                    #endif
+        // Opaque pass
+        Quad* buffer = vertexBuffers[renderChunk];
+        for (int j = 0; j < arraySizes[renderChunk]; j++) {
+            // Quads in buffer
+            float dist = FLT_MAX;
+#if 1
+            if (IntersectQuad(&ray, &direction, &buffer[j], renderChunkX, renderChunkY, renderChunkZ, &dist)) {
+                if (dist < distance) {
+                    // TODO: Remember quad for texturing etc
+                    distance = dist;
                 }
             }
+#endif
         }
 
         #define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
