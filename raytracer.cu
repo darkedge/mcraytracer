@@ -9,13 +9,17 @@ static int g_screenWidth;
 static int g_screenHeight;
 static size_t g_bufferPitch;
 
-// fractional part of float, for example, Frac(1.3) = 0.3, Frac(-1.7)=0.3
-// Calculates the value of t (absolute) for a ray starting from origin
-// to cross the first boundary with direction.
-__device__ float IntBound(float origin, float direction) {
-    float s = origin / 16.0f;
-    float ds = direction / 16.0f;
+// Calculates t for a line starting from s
+// to cross the next integer in terms of ds.
+// Assume s, ds are [-1..1]
+__device__ float FindFirstT(float s, float ds) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
+}
+
+// Transforms a point from world space to grid space [-1..1].
+__device__ float WorldToGrid(float x) {
+    float g = x * (1.0f / 16.0f);
+    return g - (int)g;
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, char y, char z, float* out_distance) {
@@ -28,12 +32,7 @@ __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, c
     float denom = dot(normal, *dir);
     float t = -1.0f;
     if (abs(denom) > 0.0001f) { // TODO: tweak epsilon
-        float3 bla = make_float3(
-            v0->pos.x + x * 16,
-            v0->pos.y + y * 16,
-            v0->pos.z + z * 16
-        );
-        t = dot(bla - *origin, normal) / denom;
+        t = dot(v0->pos - *origin, normal) / denom;
         *out_distance = t;
     }
 
@@ -50,22 +49,17 @@ static __inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
 }
 
 __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch, mat4 invViewMatrix, mat4 invProjMatrix) {
-    int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-    // Invert Y because OpenGL
-    int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
-
+    float3 direction;
     {
-        int offset = (y * bufferPitch) + x * sizeof(uchar4);
-        if (offset >= bufferPitch * height) return;
-        dst = (uchar4*)(((char*)dst) + offset);
+        int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+        // Invert Y because OpenGL
+        int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
+        float u = 2.0f * x / (float)width - 1.0f;
+        float v = 2.0f * y / (float)height - 1.0f;
+        float4 ray_eye = Mul(invProjMatrix, make_float4(u, v, -1.0f, 1.0f));
+        ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
+        direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
     }
-
-    float u = 2.0f * x / (float)width - 1.0f;
-    float v = 2.0f * y / (float)height - 1.0f;
-
-    float4 ray_eye = Mul(invProjMatrix, make_float4(u, v, -1.0f, 1.0f));
-    ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
-    float3 direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
@@ -74,19 +68,25 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     char renderChunkY = (unsigned char)floor(origin.y / 16.0f);
     char renderChunkZ = MAX_RENDER_DISTANCE;
 
+    // Transform origin to [-1..1]
+    origin.x = WorldToGrid(origin.x);
+    origin.y = WorldToGrid(origin.y);
+    origin.z = WorldToGrid(origin.z);
+
     // = (-1/1) signs of vector dir
     int stepX = (direction.x < 0) ? -1 : 1;
     int stepY = (direction.y < 0) ? -1 : 1;
     int stepZ = (direction.z < 0) ? -1 : 1;
 
-    float tMaxX = IntBound(origin.x, direction.x);
-    float tMaxY = IntBound(origin.y, direction.y);
-    float tMaxZ = IntBound(origin.z, direction.z);
+    // All positive values
+    float tMaxX = FindFirstT(origin.x, direction.x);
+    float tMaxY = FindFirstT(origin.y, direction.y);
+    float tMaxZ = FindFirstT(origin.z, direction.z);
 
     // All positive values
-    float deltaX = (float)stepX / direction.x * 16.0f;
-    float deltaY = (float)stepY / direction.y * 16.0f;
-    float deltaZ = (float)stepZ / direction.z * 16.0f;
+    float deltaX = (float)stepX / direction.x;
+    float deltaY = (float)stepY / direction.y;
+    float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
     do {
@@ -96,15 +96,14 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             renderChunkY;
 
         // Ray position from [0..16]
-        float rx = (origin.x + tMaxX * direction.x) / 16.0f;
-        float ry = (origin.y + tMaxY * direction.y) / 16.0f;
-        float rz = (origin.z + tMaxZ * direction.z) / 16.0f;
-        float3 ray = make_float3(
-            (rx > 0 ? fracf(rx) : rx - ceilf(rx)) * 16.0f,
-            (ry > 0 ? fracf(ry) : ry - ceilf(ry)) * 16.0f,
-            (rz > 0 ? fracf(rz) : rz - ceilf(rz)) * 16.0f
-        );
-
+        float3 ray;
+        {
+            float rx = origin.x + tMaxX * direction.x; rx = (rx - (int)rx) * 16.0f;
+            float ry = origin.y + tMaxY * direction.y; ry = (ry - (int)ry) * 16.0f;
+            float rz = origin.z + tMaxZ * direction.z; rz = (rz - (int)rz) * 16.0f;
+            ray = make_float3(rx, ry, rz);
+        }
+        
         if (checks < 255) checks += 5;
 
         // Opaque pass
@@ -149,6 +148,15 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     } while (distance == FLT_MAX);
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
+
+    {
+        int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+        // Invert Y because OpenGL
+        int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
+        int offset = (y * bufferPitch) + x * sizeof(uchar4);
+        if (offset >= bufferPitch * height) return;
+        dst = (uchar4*)(((char*)dst) + offset);
+    }
 
     *dst = make_uchar4(val, checks, 255, 255);
     //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
