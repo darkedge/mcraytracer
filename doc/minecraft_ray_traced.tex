@@ -1,9 +1,9 @@
-\documentclass[]{article}
+\documentclass[]{scrartcl}
 
 \usepackage{cite}
 
-%opening
-\title{Minecraft: Ray Traced and Playable}
+\title{Minecraft: Ray Traced}
+\subtitle{Or: A dynamic acceleration structure for voxel worlds}
 \author{Marco Jonkers}
 
 \begin{document}
@@ -11,18 +11,47 @@
 \maketitle
 
 \begin{abstract}
-Abstract goes here
+This project attempts to implement a GPU ray tracer in the video game Minecraft, using CUDA.
+The ray tracing itself is done in CUDA.
 \end{abstract}
 
-\section{Introduction}
-I used Minecraft Forge.
+\section{Goal}
+Similar to other ray tracing research projects by Intel Corporation.
+Also shortly explain the benefits of ray tracing versus regular rasterization.
+Minecraft's world is made up of voxels, which is nice for ray tracing.
 
-\section{Body}
+\section{Setup}
+Here I explain how the project is set up and the technologies involved.
+Minecraft is coded in Java.
+The Minecraft Forge project allows me to do two things:
+    Listen to specific events using pre-installed hooks
+    Edit Minecraft bytecode before it is loaded
+Using Java Native Interface (JNI), I can call into C++ code from Java.
+The C++ code contains the CUDA kernel.
+Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
+
+\section{Challenges}
+The challenges of this project include:
+\begin{description}
+    \item [Ray tracing performance] Because of gameplay.
+    \item [Acceleration structure rebuild speed] Because of gameplay.
+\end{description}
+
+\section{Static Geometry}
 Test for citing \cite{amanatides1987fast}.
 \\
 I am also citing \cite{ivson2009gpu}.
+\\
+I am also citing \cite{reinhard2000dynamic}.
 
-\section{Conclusion}
+\section{Dynamic Geometry}
+This section describes ray tracing dynamic objects, such as NPCs.
+
+\section{Benchmarks}
+
+
+\section{Future work}
+Future work is addressed here.
 
 \bibliography{minecraft_ray_traced}{}
 \bibliographystyle{apalike}

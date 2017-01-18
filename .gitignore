@@ -326,6 +326,5 @@ run/
 *.bbl
 *.bcf
 *.blg
-*.pdf
 *.run.xml
 *.synctex.gz
