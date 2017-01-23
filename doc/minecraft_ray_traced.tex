@@ -30,6 +30,16 @@ Using Java Native Interface (JNI), I can call into C++ code from Java.
 The C++ code contains the CUDA kernel.
 Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
 
+\section{Minecraft Rendering System}
+There are four geometry groups:
+\begin{description}
+    \item[Solid]
+    \item[Mipped Cutout]
+    \item[Cutout]
+    \item[Translucent]
+\end{description}
+Every geometry group has its own vertex buffer.
+
 \section{Challenges}
 The challenges of this project include:
 \begin{description}

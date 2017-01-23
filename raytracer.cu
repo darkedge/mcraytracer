@@ -11,15 +11,19 @@ static size_t g_bufferPitch;
 
 // Calculates t for a line starting from s
 // to cross the next integer in terms of ds.
-// Assume s, ds are [-1..1]
-__device__ float FindFirstT(float s, float ds) {
+// Assume s = [0..1], ds is [-1..1]
+__inline__ __device__ float FindFirstT(float s, float ds) {
     return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
 }
 
-// Transforms a point from world space to grid space [-1..1].
-__device__ float WorldToGrid(float x) {
-    float g = x * (1.0f / 16.0f);
-    return g - (int)g;
+// Input is in grid coordinates
+__inline__ __device__ float NormalizeGridPosition(float f) {
+    return f - floorf(f);
+}
+
+// Transforms a point from world space to grid space [0..1].
+__inline__ __device__ float WorldToGrid(float f) {
+    return NormalizeGridPosition(f * (1 / 16.0f));
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, char y, char z, float* out_distance) {
@@ -39,7 +43,7 @@ __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, c
     return t > 0.0001f;
 }
 
-static __inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
+__inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
     return make_float4(
         dot(mat.row0, vec),
         dot(mat.row1, vec),
@@ -68,7 +72,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     char renderChunkY = (unsigned char)floor(origin.y / 16.0f);
     char renderChunkZ = MAX_RENDER_DISTANCE;
 
-    // Transform origin to [-1..1]
+    // Transform origin to [0..1]
+    // Same for all threads
     origin.x = WorldToGrid(origin.x);
     origin.y = WorldToGrid(origin.y);
     origin.z = WorldToGrid(origin.z);
@@ -89,6 +94,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
+    float3 raypos;
     do {
         int renderChunk =
             renderChunkX * GRID_DIM * 16 +
@@ -96,13 +102,11 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             renderChunkY;
 
         // Ray position from [0..16]
-        float3 ray;
-        {
-            float rx = origin.x + tMaxX * direction.x; rx = (rx - (int)rx) * 16.0f;
-            float ry = origin.y + tMaxY * direction.y; ry = (ry - (int)ry) * 16.0f;
-            float rz = origin.z + tMaxZ * direction.z; rz = (rz - (int)rz) * 16.0f;
-            ray = make_float3(rx, ry, rz);
-        }
+        raypos = make_float3(
+            NormalizeGridPosition(origin.x + tMaxX * direction.x) * 16.0f,
+            NormalizeGridPosition(origin.x + tMaxY * direction.y) * 16.0f,
+            NormalizeGridPosition(origin.z + tMaxZ * direction.z) * 16.0f
+        );
         
         if (checks < 255) checks += 5;
 
@@ -112,7 +116,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             // Quads in buffer
             float dist = FLT_MAX;
 #if 1
-            if (IntersectQuad(&ray, &direction, &buffer[j], renderChunkX, renderChunkY, renderChunkZ, &dist)) {
+            if (IntersectQuad(&raypos, &direction, &buffer[j], renderChunkX, renderChunkY, renderChunkZ, &dist)) {
                 if (dist < distance) {
                     // TODO: Remember quad for texturing etc
                     distance = dist;
@@ -121,7 +125,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 #endif
         }
 
-#define TODO_RENDER_DISTANCE MAX_RENDER_DISTANCE
+#define TODO_RENDER_DISTANCE 3
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
@@ -158,6 +162,14 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         dst = (uchar4*)(((char*)dst) + offset);
     }
 
+    //*dst = make_uchar4(origin.x * 255, origin.y * 255, origin.z * 255, 255);
+    //*dst = make_uchar4(tMaxX * 255, tMaxY * 255, tMaxZ * 255, 255);
+    //*dst = make_uchar4(deltaX * 255, deltaY * 255, deltaZ * 255, 255);
+    //*dst = make_uchar4(raypos.x * 16, raypos.y * 16, raypos.z * 16, 255);
+    //*dst = make_uchar4(tMaxX * direction.x * 16, tMaxY * direction.y * 16, tMaxZ * direction.z * 16, 255);
+    //*dst = make_uchar4(raypos.x, raypos.y, raypos.z, 255);
+    //*dst = make_uchar4(ray.x * 255, ray.y * 255, ray.z * 255, 255);
+    //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
     *dst = make_uchar4(val, checks, 255, 255);
     //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
     //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);

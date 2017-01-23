@@ -305,6 +305,8 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 
     int glBufferId = env->GetIntField(obj, jni_VertexBuffer_glBufferId);
 
+    //Log(env, std::to_string(glBufferId) + std::string(" vertex count: ") + std::to_string(count));
+
     if ((glBufferId + 1) > allResources.size()) {
         allResources.resize((glBufferId + 1), NULL);
     }
