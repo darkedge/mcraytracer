@@ -13,34 +13,67 @@ static size_t g_bufferPitch;
 // to cross the next integer in terms of ds.
 // Assume s = [0..1], ds is [-1..1]
 __inline__ __device__ float FindFirstT(float s, float ds) {
-    return (ds > 0 ? ceil(s) - s : s - floor(s)) / abs(ds);
+    return (ds > 0 ? ceil(s) - s : s - floorf(s)) / fabsf(ds);
 }
 
 // Input is in grid coordinates
-__inline__ __device__ float NormalizeGridPosition(float f) {
+__inline__ __device__ float3 NormalizeGridPosition(float3 f) {
     return f - floorf(f);
 }
 
 // Transforms a point from world space to grid space [0..1].
-__inline__ __device__ float WorldToGrid(float f) {
+__inline__ __device__ float3 WorldToGrid(float3 f) {
     return NormalizeGridPosition(f * (1 / 16.0f));
 }
 
-__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, char x, char y, char z, float* out_distance) {
-    Vertex* v0 = &quad->vertices[0];
-    Vertex* v1 = &quad->vertices[1];
-    Vertex* v2 = &quad->vertices[2];
+__device__ bool IntersectTriangle(float3* origin, float3* v0, float3* v1, float3* v2, float3* dir, float* out_distance) {
+    float3 v0v1 = *v1 - *v0; // e1
+    float3 v0v2 = *v2 - *v0; // e2
+    float3 pvec = cross(*dir, v0v2); // P
+    float det = dot(v0v1, pvec);
 
-    // Get normal
-    float3 normal = normalize(cross(v2->pos - v1->pos, v0->pos - v1->pos));
+    // TODO: check face
+    if (det < 0.000001f) return false;
+
+    float invDet = 1 / det;
+
+    float3 tvec = *origin - *v0;
+    float u = dot(tvec, pvec) * invDet;
+    if (u < 0.0f || u > 1.0f) return false;
+
+    float3 qvec = cross(tvec, v0v1);
+    float v = dot(*dir, qvec) * invDet;
+    if (v < 0.0f || u + v > 1.0f) return false;
+
+    *out_distance = dot(v0v2, qvec) * invDet;
+
+    return true;
+}
+
+__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
+    // return false;
+#if 1
+    float3* v0 = &quad->vertices[0].pos;
+    float3* v1 = &quad->vertices[1].pos;
+    float3* v2 = &quad->vertices[2].pos;
+    float3* v3 = &quad->vertices[3].pos;
+
+    return IntersectTriangle(origin, v0, v1, v2, dir, out_distance) || IntersectTriangle(origin, v0, v2, v3, dir, out_distance);
+#endif
+
+#if 0
+    // Get plane normal
+    float3 normal = normalize(cross(*v1 - *v0, *v3 - *v0));
+
+    //
     float denom = dot(normal, *dir);
-    float t = -1.0f;
-    if (abs(denom) > 0.0001f) { // TODO: tweak epsilon
-        t = dot(v0->pos - *origin, normal) / denom;
-        *out_distance = t;
+    if (fabsf(denom) > 0.000001f) { // TODO: tweak epsilon
+        *out_distance = dot(*v0 - *origin, normal) / denom;
+        return true;
     }
 
-    return t > 0.0001f;
+    return false;
+#endif
 }
 
 __inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
@@ -64,19 +97,18 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
         direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
     }
+    // World space
     float3 origin = entity + viewport.origin;
 
     float distance = FLT_MAX;
 
     char renderChunkX = MAX_RENDER_DISTANCE;
-    char renderChunkY = (unsigned char)floor(origin.y / 16.0f);
+    char renderChunkY = (char)floorf(origin.y / 16.0f);
     char renderChunkZ = MAX_RENDER_DISTANCE;
 
     // Transform origin to [0..1]
-    // Same for all threads
-    origin.x = WorldToGrid(origin.x);
-    origin.y = WorldToGrid(origin.y);
-    origin.z = WorldToGrid(origin.z);
+    // Same for all threads (precompute?)
+    origin = WorldToGrid(origin);
 
     // = (-1/1) signs of vector dir
     int stepX = (direction.x < 0) ? -1 : 1;
@@ -94,29 +126,23 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
-    float3 raypos;
+    float3 raypos = origin;
     do {
         int renderChunk =
             renderChunkX * GRID_DIM * 16 +
             renderChunkZ * 16 +
             renderChunkY;
-
-        // Ray position from [0..16]
-        raypos = make_float3(
-            NormalizeGridPosition(origin.x + tMaxX * direction.x) * 16.0f,
-            NormalizeGridPosition(origin.y + tMaxY * direction.y) * 16.0f,
-            NormalizeGridPosition(origin.z + tMaxZ * direction.z) * 16.0f
-        );
         
         if (checks < 255) checks += 5;
 
         // Opaque pass
+#if 1
         Quad* buffer = vertexBuffers[renderChunk];
         for (int j = 0; j < arraySizes[renderChunk]; j++) {
             // Quads in buffer
             float dist = FLT_MAX;
 #if 1
-            if (IntersectQuad(&raypos, &direction, &buffer[j], renderChunkX, renderChunkY, renderChunkZ, &dist)) {
+            if (IntersectQuad(&raypos, &direction, &buffer[j], &dist)) {
                 if (dist < distance) {
                     // TODO: Remember quad for texturing etc
                     distance = dist;
@@ -124,31 +150,38 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
             }
 #endif
         }
+#endif
 
-#define TODO_RENDER_DISTANCE 3
+#define TODO_RENDER_DISTANCE 1
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
                 renderChunkX += stepX;
                 if (renderChunkX < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkX > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxX += deltaX;
+                raypos = origin + tMaxX * direction;
             }
             else {
                 renderChunkZ += stepZ;
                 if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += deltaZ;
+                raypos = origin + tMaxZ * direction;
             }
         } else {
             if (tMaxY < tMaxZ) {
                 renderChunkY += stepY;
                 if (renderChunkY < 0 || renderChunkY >= 16) break;
                 tMaxY += deltaY;
+                raypos = origin + tMaxY * direction;
             }
             else {
                 renderChunkZ += stepZ;
                 if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += deltaZ;
+                raypos = origin + tMaxZ * direction;
             }
         }
+
+        raypos = NormalizeGridPosition(raypos) * 16.0f;
     } while (distance == FLT_MAX);
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
@@ -162,20 +195,10 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         dst = (uchar4*)(((char*)dst) + offset);
     }
 
-    //*dst = make_uchar4(origin.x * 255, origin.y * 255, origin.z * 255, 255);
-    //*dst = make_uchar4(tMaxX * 255, tMaxY * 255, tMaxZ * 255, 255);
-    //*dst = make_uchar4(deltaX * 255, deltaY * 255, deltaZ * 255, 255);
     //*dst = make_uchar4(raypos.x * 16, raypos.y * 16, raypos.z * 16, 255);
-    //*dst = make_uchar4(tMaxX * direction.x * 16, tMaxY * direction.y * 16, tMaxZ * direction.z * 16, 255);
-    //*dst = make_uchar4(raypos.x, raypos.y, raypos.z, 255);
-    //*dst = make_uchar4(ray.x * 255, ray.y * 255, ray.z * 255, 255);
-    //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
+    //*dst = make_uchar4(direction.x * 255, direction.y * 255, direction.z * 255, 255);
     *dst = make_uchar4(val, checks, 255, 255);
     //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
-    //*dst = make_uchar4(direction.x * 256, direction.y * 256, direction.z * 256, 255);
-    //*dst = make_uchar4(u * 256, v * 256, 255, 255);
-    //*dst = make_uchar4(u * 127 + 127, v * 127 + 127, 255, 255);
-    //*dst = make_uchar4(bar.x * 127 + 127, bar.y * 127 + 127, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {

@@ -320,6 +320,20 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
             Log(env, std::string("Error during cudaGraphicsGLRegisterBuffer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
         }
         allResources[glBufferId] = dst;
+
+#if 0
+        // Print buffer for testing
+        cudaGraphicsMapResources(1, &dst);
+        void* cudaPtr;
+        size_t bufferSize;
+        cudaGraphicsResourceGetMappedPointer(&cudaPtr, &bufferSize, dst);
+        assert(bufferSize);
+        Vertex* vertices = (Vertex*) malloc(bufferSize);
+        cudaMemcpy(vertices, cudaPtr, bufferSize, cudaMemcpyDeviceToHost);
+        _CrtDbgBreak();
+        free(vertices);
+        cudaGraphicsUnmapResources(1, &dst);
+#endif
     }
 
     int x = (int)((double)chunkX - viewEntity.x) / 16 + MAX_RENDER_DISTANCE;
