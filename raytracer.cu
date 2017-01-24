@@ -104,7 +104,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         // Ray position from [0..16]
         raypos = make_float3(
             NormalizeGridPosition(origin.x + tMaxX * direction.x) * 16.0f,
-            NormalizeGridPosition(origin.x + tMaxY * direction.y) * 16.0f,
+            NormalizeGridPosition(origin.y + tMaxY * direction.y) * 16.0f,
             NormalizeGridPosition(origin.z + tMaxZ * direction.z) * 16.0f
         );
         
