@@ -25,7 +25,7 @@ static GLint texWidth;
 static GLint texHeight;
 
 static GLuint texture;
-static cudaGraphicsResource_t gfxResource;
+static cudaGraphicsResource* gfxResource;
 
 #define MJ_EXPORT __declspec(dllexport)
 
@@ -91,11 +91,19 @@ void Log(JNIEnv* env, const std::string& stdstr) {
 }
 
 // Used in the kernel
-static void** devicePointers;
-static int* arraySizes;
 static Viewport viewport;
-static Quad** cudaDevicePointers;
-static int* cudaArraySizes;
+
+// Host memory
+static void* h_devPtrs[DEVICE_PTRS_COUNT];
+static int h_arraySizes[DEVICE_PTRS_COUNT];
+
+// Device memory backing arrays for textures
+static void* d_devPtrs;
+static void* d_arraySizes;
+
+// Texture objects (passed as arguments to kernel)
+static cudaTextureObject_t t_devPtrs;
+static cudaTextureObject_t t_arraySizes;
 
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
@@ -104,22 +112,59 @@ void Init(JNIEnv* env) {
     CacheJNI(env);
     Log(env, "Init");
 
-    cudaError err;
-    err = cudaHostAlloc((void**)&devicePointers, DEVICE_PTRS_COUNT * sizeof(void*), cudaHostAllocMapped);
+#if 0
+    err = cudaHostAlloc((void**)&h_devPtrs, DEVICE_PTRS_COUNT * sizeof(void*), cudaHostAllocMapped);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
-    err = cudaHostAlloc(&arraySizes, DEVICE_PTRS_COUNT * sizeof(int), cudaHostAllocMapped);
+    err = cudaHostAlloc(&h_arraySizes, DEVICE_PTRS_COUNT * sizeof(int), cudaHostAllocMapped);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
-    err = cudaHostGetDevicePointer(&cudaDevicePointers, devicePointers, 0);
+    err = cudaHostGetDevicePointer(&cudah_devPtrs, h_devPtrs, 0);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
     }
-    err = cudaHostGetDevicePointer(&cudaArraySizes, arraySizes, 0);
+    err = cudaHostGetDevicePointer(&cudah_arraySizes, h_arraySizes, 0);
     if (err != cudaSuccess) {
         Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
+    }
+#endif
+
+    // Create CUDA arrays
+    {
+        CUDA_TRY(cudaMalloc(&d_devPtrs, sizeof(h_devPtrs)));
+        CUDA_TRY(cudaMalloc(&d_arraySizes, sizeof(h_arraySizes)));
+    }
+
+    // Create CUDA texture objects
+    {
+        cudaResourceDesc resDesc = {};
+        resDesc.resType = cudaResourceTypeLinear;
+        
+        
+        cudaTextureDesc texDesc = {};
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+
+        resDesc.res.linear.devPtr = d_devPtrs;
+        resDesc.res.linear.sizeInBytes = sizeof(h_devPtrs);
+        {
+            cudaChannelFormatDesc formatDesc = {};
+            formatDesc.x = 32;
+            formatDesc.y = 32;
+            formatDesc.f = cudaChannelFormatKindUnsigned;
+            resDesc.res.linear.desc = formatDesc;
+        }
+        CUDA_TRY(cudaCreateTextureObject(&t_devPtrs, &resDesc, &texDesc, NULL));
+
+        resDesc.res.linear.devPtr = d_arraySizes;
+        resDesc.res.linear.sizeInBytes = sizeof(h_arraySizes);
+        {
+            cudaChannelFormatDesc formatDesc = {};
+            formatDesc.x = 32;
+            resDesc.res.linear.desc = formatDesc;
+        }
+        CUDA_TRY(cudaCreateTextureObject(&t_arraySizes, &resDesc, &texDesc, NULL));
     }
 }
 
@@ -127,11 +172,8 @@ void Destroy(JNIEnv* env) {
     Log(env, "Destroy");
     // Unregister CUDA resource
     if (gfxResource) {
-        cudaError_t err = cudaGraphicsUnregisterResource(gfxResource);
-        if (err != cudaSuccess) {
-            Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-        }
-        gfxResource = 0;
+        CUDA_TRY(cudaGraphicsUnregisterResource(gfxResource));
+        gfxResource = NULL;
     }
 
     if (texture) {
@@ -139,14 +181,25 @@ void Destroy(JNIEnv* env) {
         texture = 0;
     }
 
-    if (devicePointers) {
-        cudaFreeHost(devicePointers);
-        devicePointers = 0;
+    if (t_devPtrs) {
+        cudaDestroyTextureObject(t_devPtrs);
+        t_devPtrs = 0;
     }
 
-    if (arraySizes) {
-        cudaFreeHost(arraySizes);
-        arraySizes = 0;
+    if (t_arraySizes) {
+        cudaDestroyTextureObject(t_arraySizes);
+        t_arraySizes = 0;
+    }
+
+    // Free arrays
+    if (d_arraySizes) {
+        cudaFree(d_arraySizes);
+        d_arraySizes = NULL;
+    }
+
+    if (d_devPtrs) {
+        cudaFree(d_devPtrs);
+        d_devPtrs = NULL;
     }
 }
 
@@ -165,15 +218,10 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
         texWidth = tw;
         texHeight = th;
 
-        cudaError_t err;
-
         // Unregister CUDA resource
         if (gfxResource) {
             cudaGraphicsUnmapResources(1, &gfxResource);
-            err = cudaGraphicsUnregisterResource(gfxResource);
-            if (err != cudaSuccess) {
-                Log(env, std::string("cudaGraphicsUnregisterResource failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-            }
+            CUDA_TRY(cudaGraphicsUnregisterResource(gfxResource));
         }
 
         // glTexImage2D supports resizing so we only need to call glGenTextures once
@@ -196,10 +244,7 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
         Log(env, std::string("Texture size: ") + std::to_string(texWidth) + std::string(", ") + std::to_string(texHeight));
 
         // Register CUDA resource
-        err = cudaGraphicsGLRegisterImage(&gfxResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
-        if (err != cudaSuccess) {
-            Log(env, std::string("cudaGraphicsGLRegisterImage failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-        }
+        CUDA_TRY(cudaGraphicsGLRegisterImage(&gfxResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard));
 
         cudaGraphicsMapResources(1, &gfxResource);
     }
@@ -225,18 +270,13 @@ static mat4 viewMatrixInv;
 static mat4 projMatrixInv;
 
 jint Raytrace(JNIEnv* env) {
-    cudaError err;
-
     // Clear kernel buffers
-    memset(devicePointers, 0, sizeof(devicePointers));
-    memset(arraySizes, 0, sizeof(arraySizes));
+    memset(h_devPtrs, 0, sizeof(h_devPtrs));
+    memset(h_arraySizes, 0, sizeof(h_arraySizes));
 
     if (!frameResources.empty()) {
         // Map all resources
-        err = cudaGraphicsMapResources((int) frameResources.size(), frameResources.data());
-        if (err != cudaSuccess) {
-            Log(env, std::string("Error during cudaGraphicsMapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-        }
+        CUDA_TRY(cudaGraphicsMapResources((int) frameResources.size(), frameResources.data()));
     
         // Update device pointers
         for (int i = 0; i < translations.size(); i++) {
@@ -245,26 +285,28 @@ jint Raytrace(JNIEnv* env) {
             size_t bufferSize;
             size_t idx = t.x * GRID_DIM * 16 + t.z * 16 + t.y;
             void* devicePointer;
+            cudaError err;
             if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointer, &bufferSize, frameResources[i])) != cudaSuccess) {
                 Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
                 continue;
             }
             // FIXME: Some buffers do not pass this check for some reason
             if (bufferSize >= t.count * VERTEX_SIZE_BYTES) {
-                devicePointers[idx] = devicePointer;
-                arraySizes[idx] = t.count / 4;
+                h_devPtrs[idx] = devicePointer;
+                h_arraySizes[idx] = t.count / 4;
             }
         }
     }
+
+    // memcpy to texture memory
+    cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_arraySizes, h_arraySizes, sizeof(h_arraySizes), cudaMemcpyHostToDevice);
     
-    rtRaytrace(env, gfxResource, texHeight, cudaDevicePointers, cudaArraySizes, viewport, viewEntity, viewMatrixInv, projMatrixInv);
+    rtRaytrace(env, gfxResource, texHeight, t_devPtrs, t_arraySizes, viewport, viewEntity, viewMatrixInv, projMatrixInv);
 
     if (!frameResources.empty()) {
         // Unmap all resources
-        err = cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data());
-        if (err != cudaSuccess) {
-            Log(env, std::string("Error during cudaGraphicsUnmapResources, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-        }
+        CUDA_TRY(cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data()));
 
         // Clear per-frame data
         frameResources.clear();
@@ -314,11 +356,8 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
     if (!allResources[glBufferId]) {
         // Register buffer in CUDA
         // TODO: Unregister buffer on destroy using cudaGraphicsUnregisterResource
-        cudaGraphicsResource* dst = 0;
-        cudaError err = cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly);
-        if (err != cudaSuccess) {
-            Log(env, std::string("Error during cudaGraphicsGLRegisterBuffer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-        }
+        cudaGraphicsResource* dst = NULL;
+        CUDA_TRY(cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly));
         allResources[glBufferId] = dst;
 
 #if 0

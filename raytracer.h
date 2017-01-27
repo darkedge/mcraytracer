@@ -8,6 +8,19 @@
 #define VERTEX_SIZE_BYTES 28
 #define DEVICE_PTRS_COUNT (GRID_DIM * GRID_DIM * 16)
 
+// This requires a JNIEnv* called env
+#ifdef _DEBUG
+#define CUDA_TRY(expr)\
+do {\
+    cudaError err =  expr;\
+    if (err != cudaSuccess) {\
+        Log(env, std::string(#expr " failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));\
+    }\
+} while (0);
+#else
+#define CUDA_TRY(expr, ...) expr(__VA_ARGS__)
+#endif
+
 // sizeof(Vertex) should be VERTEX_SIZE_BYTES
 struct Vertex {
     float3 pos;
@@ -36,17 +49,7 @@ struct mat4 {
     float4 row3;
 };
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix);
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, cudaTextureObject_t devicePointers, cudaTextureObject_t arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix);
 void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);
-
-
-#define CUDA_TRY(x)\
-do {\
-    cudaError_t err = x;\
-    if (err != cudaSuccess) {\
-        Log(env, std::string(#x" failed, err = ") + std::to_string(err));\
-    }\
-} while (0);
-

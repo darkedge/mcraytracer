@@ -1,5 +1,6 @@
 #include "raytracer.h"
 #include "helper_math.h"
+#include <texture_fetch_functions.h>
 
 // BLOCK_SIZE^2 = max threads per SM / max active blocks
 #define BLOCK_SIZE 8 // JOTARO
@@ -8,6 +9,9 @@ static uchar4* kernelOutputBuffer;
 static int g_screenWidth;
 static int g_screenHeight;
 static size_t g_bufferPitch;
+
+// TODO: test texture references (because texture objects are compute 3.0 only)
+//texture<float, 1, cudaReadModeElementType> tex;
 
 // Calculates t for a line starting from s
 // to cross the next integer in terms of ds.
@@ -51,7 +55,6 @@ __device__ bool IntersectTriangle(float3* origin, float3* v0, float3* v1, float3
 }
 
 __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
-    // return false;
 #if 1
     float3* v0 = &quad->vertices[0].pos;
     float3* v1 = &quad->vertices[1].pos;
@@ -85,7 +88,8 @@ __inline__ __device__ float4 Mul(mat4 mat, float4 vec) {
     );
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch, mat4 invViewMatrix, mat4 invProjMatrix) {
+__global__ void Kernel(uchar4* dst, int width, int height, cudaTextureObject_t vertexBuffers, cudaTextureObject_t arraySizes, Viewport viewport, float3 entity, size_t bufferPitch, mat4 invViewMatrix, mat4 invProjMatrix) {
+#if 1
     float3 direction;
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -97,6 +101,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         ray_eye = Mul(invViewMatrix, make_float4(ray_eye.x, ray_eye.y, -1.0f, 0.0f));
         direction = normalize(make_float3(ray_eye.x, ray_eye.y, ray_eye.z));
     }
+#if 1
     // World space
     float3 origin = entity + viewport.origin;
 
@@ -127,6 +132,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
     unsigned char checks = 0;
     float3 raypos = origin;
+#if 1
     do {
         int renderChunk =
             renderChunkX * GRID_DIM * 16 +
@@ -137,11 +143,15 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
         // Opaque pass
 #if 1
-        Quad* buffer = vertexBuffers[renderChunk];
-        for (int j = 0; j < arraySizes[renderChunk]; j++) {
+        //Quad* buffer = vertexBuffers[renderChunk];
+        uint2 rval = tex1Dfetch<uint2>(vertexBuffers, renderChunk);
+        Quad* buffer = (Quad*) (((size_t)rval.y << 32) | rval.x);
+        int size = tex1Dfetch<int>(arraySizes, renderChunk);
+        for (int j = 0; j < size; j++) {
+        //for (int j = 0; j < arraySizes[renderChunk]; j++) {
             // Quads in buffer
             float dist = FLT_MAX;
-#if 1
+#if 0
             if (IntersectQuad(&raypos, &direction, &buffer[j], &dist)) {
                 if (dist < distance) {
                     // TODO: Remember quad for texturing etc
@@ -183,9 +193,13 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
 
         raypos = NormalizeGridPosition(raypos) * 16.0f;
     } while (distance == FLT_MAX);
+#endif
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
+#endif
 
+#endif
+    //float u, v; // TEST LINE, REMOVE
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
         // Invert Y because OpenGL
@@ -193,41 +207,48 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         int offset = (y * bufferPitch) + x * sizeof(uchar4);
         if (offset >= bufferPitch * height) return;
         dst = (uchar4*)(((char*)dst) + offset);
+
+        //u = x / (float)width; // TEST LINE, REMOVE
+        //v = y / (float)height; // TEST LINE, REMOVE
     }
 
-    //*dst = make_uchar4(raypos.x * 16, raypos.y * 16, raypos.z * 16, 255);
-    //*dst = make_uchar4(direction.x * 255, direction.y * 255, direction.z * 255, 255);
     *dst = make_uchar4(val, checks, 255, 255);
+    //*dst = make_uchar4(raypos.x * 16, raypos.y * 16, raypos.z * 16, 255);
     //*dst = make_uchar4(direction.x * 127 + 127, direction.y * 127 + 127, direction.z * 127 + 127, 255);
+    //*dst = make_uchar4(u * 255, v * 255, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     g_screenWidth = screenWidth;
     g_screenHeight = screenHeight;
 
-    cudaError_t err;
-    
     // Resize
     if (kernelOutputBuffer) {
-        err = cudaFree(kernelOutputBuffer);
-        if (err != cudaSuccess) {
-            Log(env, std::string("Error during cudaFree, error code ") + std::to_string(err) + std::string(": ") + std::string(": ") + cudaGetErrorString(err));
-        }
+        CUDA_TRY(cudaFree(kernelOutputBuffer));
     }
 
-    err = cudaMallocPitch((void**)&kernelOutputBuffer, &g_bufferPitch, g_screenWidth * sizeof(uchar4), g_screenHeight * sizeof(uchar4));
-    if (err != cudaSuccess) {
-        Log(env, std::string("Error during cudaMallocPitch, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
+    CUDA_TRY(cudaMallocPitch((void**)&kernelOutputBuffer, &g_bufferPitch, g_screenWidth * sizeof(uchar4), g_screenHeight * sizeof(uchar4)));
 }
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, Quad** devicePointers, int* arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix) {
+void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t glTexture, int texHeight, cudaTextureObject_t devicePointers, cudaTextureObject_t arraySizes, const Viewport &viewport, const float3& viewEntity, mat4 invViewMatrix, mat4 invProjMatrix) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
 
     // Kernel call
+#if 0
+    float time;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start, 0);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch, invViewMatrix, invProjMatrix);
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&time, start, stop);
+    Log(env, std::to_string(time));
+#endif
     Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch, invViewMatrix, invProjMatrix);
 
     // Copy CUDA result to OpenGL texture
