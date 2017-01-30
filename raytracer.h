@@ -18,7 +18,7 @@ do {\
     }\
 } while (0);
 #else
-#define CUDA_TRY(expr, ...) expr(__VA_ARGS__)
+#define CUDA_TRY(expr, ...) expr;
 #endif
 
 // sizeof(Vertex) should be VERTEX_SIZE_BYTES
