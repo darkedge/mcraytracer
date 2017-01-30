@@ -44,8 +44,6 @@ extern "C" {
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
     MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
-    MJ_EXPORT void SetInverseViewMatrix(JNIEnv*, jobject);
-    MJ_EXPORT void SetInverseProjectionMatrix(JNIEnv*, jobject);
 }
 
 static jfieldID jni_VertexBuffer_count;
@@ -266,8 +264,6 @@ static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
 static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
 static std::vector<GfxRes2DevPtr> translations;
 static float3 viewEntity;
-static mat4 viewMatrixInv;
-static mat4 projMatrixInv;
 
 jint Raytrace(JNIEnv* env) {
     // Clear kernel buffers
@@ -302,7 +298,7 @@ jint Raytrace(JNIEnv* env) {
     cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
     cudaMemcpy(d_arraySizes, h_arraySizes, sizeof(h_arraySizes), cudaMemcpyHostToDevice);
     
-    rtRaytrace(env, gfxResource, texHeight, t_devPtrs, t_arraySizes, viewport, viewEntity, viewMatrixInv, projMatrixInv);
+    rtRaytrace(env, gfxResource, texHeight, t_devPtrs, t_arraySizes, viewport, viewEntity);
 
     if (!frameResources.empty()) {
         // Unmap all resources
@@ -316,19 +312,11 @@ jint Raytrace(JNIEnv* env) {
     return texture;
 }
 
-void SetInverseViewMatrix(JNIEnv* env, jobject arr) {
-    memcpy(&viewMatrixInv, env->GetDirectBufferAddress(arr), sizeof(viewMatrixInv));
-}
-
-void SetInverseProjectionMatrix(JNIEnv* env, jobject arr) {
-    memcpy(&projMatrixInv, env->GetDirectBufferAddress(arr), sizeof(projMatrixInv));
-}
-
 void SetViewingPlane(JNIEnv* env, jobject arr) {
     jfloat* buffer = (jfloat*)env->GetDirectBufferAddress(arr);
-    viewport.p0 = float3{buffer[0], buffer[1], buffer[2]};
-    viewport.p1 = float3{buffer[3], buffer[4], buffer[5]};
-    viewport.p2 = float3{buffer[6], buffer[7], buffer[8]};
+    viewport.p0 = make_float3(buffer[0], buffer[1], buffer[2]);
+    viewport.p1 = make_float3(buffer[3], buffer[4], buffer[5]);
+    viewport.p2 = make_float3(buffer[6], buffer[7], buffer[8]);
     float3 p0p1 = viewport.p1 - viewport.p0;
     float3 p0p2 = viewport.p2 - viewport.p0;
 

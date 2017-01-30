@@ -70,16 +70,10 @@ public class Renderer {
         float farPlaneDistance = (float) (this.mc.gameSettings.renderDistanceChunks * 16);
         Matrix4f projection = glhPerspectivef2(fov, (float) this.mc.displayWidth / (float) this.mc.displayHeight, 0.05F, farPlaneDistance * MathHelper.SQRT_2);
 
-        // Pass inverse projection matrix to C++
         // Java matrix is column major
-        // We transpose to row major because then we can just use dot products in the kernel
         FloatBuffer projBuffer = ByteBuffer.allocateDirect(16 * 4)
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
-        Matrix4f invProj = Matrix4f.invert(projection, null);
-        invProj.storeTranspose(projBuffer);
-        projBuffer.position(0);
-        raytracer.setInverseProjectionMatrix(projBuffer);
 
         // Build view matrix
 
@@ -97,14 +91,9 @@ public class Renderer {
         view.rotate((float) Math.toRadians(yaw), new Vector3f(0.0f, 1.0f, 0.0f));
         view.translate(new Vector3f(0.0f, -entity.getEyeHeight(), 0.0f));
 
-        // Pass inverse view matrix to C++
         FloatBuffer viewBuffer = ByteBuffer.allocateDirect(16 * 4)
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
-        Matrix4f invView = Matrix4f.invert(view, null);
-        invView.storeTranspose(viewBuffer);
-        viewBuffer.position(0);
-        raytracer.setInverseViewMatrix(viewBuffer);
 
         view.store(viewBuffer);
         viewBuffer.position(0);
