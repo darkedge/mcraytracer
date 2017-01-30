@@ -57,19 +57,11 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
 
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
- * Method:    setInverseProjectionMatrix
- * Signature: (Ljava/nio/FloatBuffer;)V
+ * Method:    stopProfiling
+ * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseProjectionMatrix
-  (JNIEnv *, jobject, jobject);
-
-/*
- * Class:     com_marcojonkers_mcraytracer_Raytracer
- * Method:    setInverseViewMatrix
- * Signature: (Ljava/nio/FloatBuffer;)V
- */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setInverseViewMatrix
-  (JNIEnv *, jobject, jobject);
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_stopProfiling
+  (JNIEnv *, jobject);
 
 #ifdef __cplusplus
 }

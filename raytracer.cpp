@@ -3,6 +3,7 @@
 
 #include <glad/glad.h>
 #include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
 #include <vector_types.h>
 #include <cuda_gl_interop.h>
 
@@ -44,6 +45,7 @@ extern "C" {
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
     MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
+    MJ_EXPORT void StopProfiling(JNIEnv*);
 }
 
 static jfieldID jni_VertexBuffer_count;
@@ -382,4 +384,9 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 // This is called before SetVertexBuffer in order to translate the renderChunks.
 void SetViewEntity(JNIEnv*, jdouble x, jdouble y, jdouble z) {
     viewEntity = float3{(float)x, (float)y, (float)z};
+}
+
+void StopProfiling(JNIEnv*) {
+    cudaDeviceSynchronize();
+    cudaProfilerStop();
 }

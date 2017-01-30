@@ -45,6 +45,7 @@ public class Raytracer {
     private static final Logger LOGGER = LogManager.getLogger(MODID);
     public static final String VERSION = "1.0";
     private static final KeyBinding TOGGLE_KEY = new KeyBinding("Toggle Ray Tracing", Keyboard.KEY_G, MODID);
+    private static final KeyBinding STOP_PROFILING = new KeyBinding("Stop Profiling", Keyboard.KEY_H, MODID);
 
     // C++ functions
     private native void init();
@@ -53,6 +54,7 @@ public class Raytracer {
     public native void setViewingPlane(FloatBuffer buffer);
     private native void setVertexBuffer(int x, int y, int z, int pass, VertexBuffer buffer);
     public native void setViewEntity(double x, double y, double z);
+    public native void stopProfiling();
 
     // TODO: Group calls together to prevent JNI overhead
     public void setVertexBuffer(BlockPos pos, int pass, VertexBuffer buffer) {
@@ -68,6 +70,7 @@ public class Raytracer {
         mc = Minecraft.getMinecraft();
         MinecraftForge.EVENT_BUS.register(this);
         ClientRegistry.registerKeyBinding(TOGGLE_KEY);
+        ClientRegistry.registerKeyBinding(STOP_PROFILING);
         renderer = new Renderer(this);
 
         this.renderContainer = new RaytracerRenderList();
@@ -84,6 +87,11 @@ public class Raytracer {
     public void onClientTickEvent(TickEvent.ClientTickEvent event) {
         if (TOGGLE_KEY.isPressed()) {
             enabled = !enabled;
+        }
+        if (STOP_PROFILING.isPressed()) {
+            stopProfiling();
+            LOGGER.info("Stop Profiling.");
+            enabled = false;
         }
     }
 

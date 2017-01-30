@@ -37,6 +37,9 @@ typedef RT_SET_VERTEX_BUFFER(SetVertexBufferFunc);
 #define RT_SET_VIEW_ENTITY(name) void name(JNIEnv*, jdouble, jdouble, jdouble)
 typedef RT_SET_VIEW_ENTITY(SetViewEntityFunc);
 
+#define RT_STOP_PROFILING(name) void name(JNIEnv*)
+typedef RT_STOP_PROFILING(StopProfilingFunc);
+
 struct Raytracer {
     InitFunc* Init;
     DestroyFunc* Destroy;
@@ -45,6 +48,7 @@ struct Raytracer {
     SetViewingPlaneFunc* SetViewingPlane;
     SetVertexBufferFunc* SetVertexBuffer;
     SetViewEntityFunc* SetViewEntity;
+    StopProfilingFunc* StopProfiling;
 
     FILETIME DLLLastWriteTime;
     bool valid;
@@ -113,6 +117,7 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.SetViewingPlane = (SetViewingPlaneFunc*)GetProcAddress(raytracer.dll, "SetViewingPlane");
             raytracer.SetVertexBuffer = (SetVertexBufferFunc*)GetProcAddress(raytracer.dll, "SetVertexBuffer");
             raytracer.SetViewEntity = (SetViewEntityFunc*)GetProcAddress(raytracer.dll, "SetViewEntity");
+            raytracer.StopProfiling = (StopProfilingFunc*)GetProcAddress(raytracer.dll, "StopProfiling");
 
             raytracer.valid = 
                 raytracer.Init &&
@@ -121,7 +126,8 @@ static Raytracer Load(JNIEnv* env) {
                 raytracer.Raytrace &&
                 raytracer.SetViewingPlane &&
                 raytracer.SetVertexBuffer &&
-                raytracer.SetViewEntity;
+                raytracer.SetViewEntity &&
+                raytracer.StopProfiling;
 
             if (raytracer.valid) {
                 Log(env, "Successfully (re)loaded Raytracer DLL.");
@@ -140,6 +146,7 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.SetViewingPlane = NULL;
         raytracer.SetVertexBuffer = NULL;
         raytracer.SetViewEntity = NULL;
+        raytracer.StopProfiling = NULL;
     }
 
     return raytracer;
@@ -217,4 +224,9 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuff
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
 (JNIEnv* env, jobject, jdouble x, jdouble y, jdouble z) {
     g_raytracer.SetViewEntity(env, x, y, z);
+}
+
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_stopProfiling
+(JNIEnv* env, jobject) {
+    g_raytracer.StopProfiling(env);
 }
