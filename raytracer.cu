@@ -21,6 +21,7 @@ __inline__ __device__ float FindFirstT(float s, float ds) {
 }
 
 // Input is in grid coordinates
+// Output is [0..1]
 __inline__ __device__ float3 NormalizeGridPosition(float3 f) {
     return f - floorf(f);
 }
@@ -131,7 +132,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, cudaTextureObject_t v
     float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
-    float3 raypos = origin;
+    float3 raypos = origin * 16.0f;
 #if 1
     do {
         int renderChunk =
