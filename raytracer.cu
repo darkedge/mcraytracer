@@ -31,56 +31,40 @@ __inline__ __device__ float3 WorldToGrid(float3 f) {
     return NormalizeGridPosition(f * (1 / 16.0f));
 }
 
-__device__ bool IntersectTriangle(float3* origin, float3* v0, float3* v1, float3* v2, float3* dir, float* out_distance) {
-    float3 v0v1 = *v1 - *v0; // e1
-    float3 v0v2 = *v2 - *v0; // e2
-    float3 pvec = cross(*dir, v0v2); // P
+__device__ bool IntersectTriangle(const float3* const origin, const float3* const v0, const float3* const v1, const float3* const v2, const float3* const dir, float* out_distance) {
+    const float3 v0v1 = *v1 - *v0; // e1
+    const float3 v0v2 = *v2 - *v0; // e2
+    const float3 pvec = cross(*dir, v0v2); // P
     float det = dot(v0v1, pvec);
 
     if (det < 0.000001f) return false;
 
-    float invDet = 1 / det;
+    det = 1.0f / det;
 
     float3 tvec = *origin - *v0;
-    float u = dot(tvec, pvec) * invDet;
+    const float u = dot(tvec, pvec) * det;
     if (u < 0.0f || u > 1.0f) return false;
 
-    float3 qvec = cross(tvec, v0v1);
-    float v = dot(*dir, qvec) * invDet;
+    tvec = cross(tvec, v0v1);
+    const float v = dot(*dir, tvec) * det;
     if (v < 0.0f || u + v > 1.0f) return false;
 
-    *out_distance = dot(v0v2, qvec) * invDet;
+    *out_distance = dot(v0v2, tvec) * det;
 
     return true;
 }
 
-__device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* out_distance) {
-//return false;
-#if 1
-    float3* v0 = &quad->vertices[0].pos;
-    float3* v1 = &quad->vertices[1].pos;
-    float3* v2 = &quad->vertices[2].pos;
-    float3* v3 = &quad->vertices[3].pos;
+__device__ bool IntersectQuad(const float3* const origin, const float3* const dir, const Quad* const quad, float* const out_distance) {
+    const float3* const v0 = &quad->vertices[0].pos;
+    const float3* const v1 = &quad->vertices[1].pos;
+    const float3* const v2 = &quad->vertices[2].pos;
+    const float3* const v3 = &quad->vertices[3].pos;
 
     return IntersectTriangle(origin, v0, v1, v2, dir, out_distance) || IntersectTriangle(origin, v0, v2, v3, dir, out_distance);
-#endif
-
-#if 0
-    // Get plane normal
-    float3 normal = normalize(cross(*v1 - *v0, *v3 - *v0));
-
-    //
-    float denom = dot(normal, *dir);
-    if (fabsf(denom) > 0.000001f) { // TODO: tweak epsilon
-        *out_distance = dot(*v0 - *origin, normal) / denom;
-        return true;
-    }
-
-    return false;
-#endif
 }
 
 __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
+    __shared__ Quad quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
 #if 1
     float3 direction;
     {
@@ -108,9 +92,9 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     origin = WorldToGrid(origin);
 
     // = (-1/1) signs of vector dir
-    char stepX = (direction.x < 0) ? -1 : 1;
-    char stepY = (direction.y < 0) ? -1 : 1;
-    char stepZ = (direction.z < 0) ? -1 : 1;
+    const char stepX = (direction.x < 0) ? -1 : 1;
+    const char stepY = (direction.y < 0) ? -1 : 1;
+    const char stepZ = (direction.z < 0) ? -1 : 1;
 
     // All positive values
     float tMaxX = FindFirstT(origin.x, direction.x);
@@ -118,15 +102,15 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
     float tMaxZ = FindFirstT(origin.z, direction.z);
 
     // All positive values
-    float deltaX = (float)stepX / direction.x;
-    float deltaY = (float)stepY / direction.y;
-    float deltaZ = (float)stepZ / direction.z;
+    const float deltaX = (float)stepX / direction.x;
+    const float deltaY = (float)stepY / direction.y;
+    const float deltaZ = (float)stepZ / direction.z;
 
     unsigned char checks = 0;
     float3 raypos = origin * 16.0f;
 #if 1
     do {
-        int renderChunk =
+        const int renderChunk =
             renderChunkX * GRID_DIM * 16 +
             renderChunkZ * 16 +
             renderChunkY;
@@ -136,11 +120,18 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         // Opaque pass
 #if 1
         Quad* buffer = vertexBuffers[renderChunk];
-        for (int j = 0; j < arraySizes[renderChunk]; j++) {
+        char threadId = threadIdx.y * BLOCK_SIZE + threadIdx.x;
+        int size = arraySizes[renderChunk];
+        if (threadId < size) {
+            quads[threadId] = buffer[threadId];
+        }
+        __syncthreads();
+
+        for (int j = 0; j < size; j++) {
             // Quads in buffer
             float dist = FLT_MAX;
 #if 1
-            if (IntersectQuad(&raypos, &direction, &buffer[j], &dist)) {
+            if (IntersectQuad(&raypos, &direction, &quads[j], &dist)) {
                 if (dist < distance) {
                     // TODO: Remember quad for texturing etc
                     distance = dist;
