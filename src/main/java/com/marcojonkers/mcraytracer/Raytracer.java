@@ -129,9 +129,15 @@ public class Raytracer {
         return new Vector3f(f3 * f4, f5, f2 * f4);
     }
 
+    private boolean turnOnDebug = true;
+
     // Called by patched EntityRenderer
     @SuppressWarnings("unused")
     public void onRenderTickEvent() {
+        if (turnOnDebug) {
+            turnOnDebug = false;
+            mc.gameSettings.showDebugInfo = true;
+        }
         if (!enabled) return;
         Entity entity = this.mc.getRenderViewEntity();
         if (entity == null) return;
