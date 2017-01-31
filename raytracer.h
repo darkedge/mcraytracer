@@ -42,7 +42,7 @@ struct Viewport {
     float3 p2; // Bottom-left
 };
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, cudaTextureObject_t devicePointers, cudaTextureObject_t arraySizes, const Viewport &viewport, const float3& viewEntity);
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* devicePointers, void* arraySizes, const Viewport &viewport, const float3& viewEntity);
 void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);

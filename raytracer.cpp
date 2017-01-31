@@ -101,10 +101,6 @@ static int h_arraySizes[DEVICE_PTRS_COUNT];
 static void* d_devPtrs;
 static void* d_arraySizes;
 
-// Texture objects (passed as arguments to kernel)
-static cudaTextureObject_t t_devPtrs;
-static cudaTextureObject_t t_arraySizes;
-
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
         Log(env, "Could not load OpenGL functions!");
@@ -136,36 +132,6 @@ void Init(JNIEnv* env) {
         CUDA_TRY(cudaMalloc(&d_devPtrs, sizeof(h_devPtrs)));
         CUDA_TRY(cudaMalloc(&d_arraySizes, sizeof(h_arraySizes)));
     }
-
-    // Create CUDA texture objects
-    {
-        cudaResourceDesc resDesc = {};
-        resDesc.resType = cudaResourceTypeLinear;
-        
-        
-        cudaTextureDesc texDesc = {};
-        texDesc.addressMode[0] = cudaAddressModeClamp;
-
-        resDesc.res.linear.devPtr = d_devPtrs;
-        resDesc.res.linear.sizeInBytes = sizeof(h_devPtrs);
-        {
-            cudaChannelFormatDesc formatDesc = {};
-            formatDesc.x = 32;
-            formatDesc.y = 32;
-            formatDesc.f = cudaChannelFormatKindUnsigned;
-            resDesc.res.linear.desc = formatDesc;
-        }
-        CUDA_TRY(cudaCreateTextureObject(&t_devPtrs, &resDesc, &texDesc, NULL));
-
-        resDesc.res.linear.devPtr = d_arraySizes;
-        resDesc.res.linear.sizeInBytes = sizeof(h_arraySizes);
-        {
-            cudaChannelFormatDesc formatDesc = {};
-            formatDesc.x = 32;
-            resDesc.res.linear.desc = formatDesc;
-        }
-        CUDA_TRY(cudaCreateTextureObject(&t_arraySizes, &resDesc, &texDesc, NULL));
-    }
 }
 
 void Destroy(JNIEnv* env) {
@@ -179,16 +145,6 @@ void Destroy(JNIEnv* env) {
     if (texture) {
         glDeleteTextures(1, &texture);
         texture = 0;
-    }
-
-    if (t_devPtrs) {
-        cudaDestroyTextureObject(t_devPtrs);
-        t_devPtrs = 0;
-    }
-
-    if (t_arraySizes) {
-        cudaDestroyTextureObject(t_arraySizes);
-        t_arraySizes = 0;
     }
 
     // Free arrays
@@ -300,7 +256,7 @@ jint Raytrace(JNIEnv* env) {
     cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
     cudaMemcpy(d_arraySizes, h_arraySizes, sizeof(h_arraySizes), cudaMemcpyHostToDevice);
     
-    rtRaytrace(env, gfxResource, texHeight, t_devPtrs, t_arraySizes, viewport, viewEntity);
+    rtRaytrace(env, gfxResource, texHeight, d_devPtrs, d_arraySizes, viewport, viewEntity);
 
     if (!frameResources.empty()) {
         // Unmap all resources
