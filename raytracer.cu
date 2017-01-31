@@ -1,6 +1,5 @@
 #include "raytracer.h"
 #include "helper_math.h"
-#include <texture_fetch_functions.h>
 
 // BLOCK_SIZE^2 = max threads per SM / max active blocks
 #define BLOCK_SIZE 8 // JOTARO
@@ -10,8 +9,10 @@ static int g_screenWidth;
 static int g_screenHeight;
 static size_t g_bufferPitch;
 
-// TODO: test texture references (because texture objects are compute 3.0 only)
-//texture<float, 1, cudaReadModeElementType> tex;
+texture<uint2> devPtrs;
+texture<int> arraySizes;
+static cudaChannelFormatDesc desc_devPtrs;
+static cudaChannelFormatDesc desc_arraySizes;
 
 // Calculates t for a line starting from s
 // to cross the next integer in terms of ds.
@@ -80,7 +81,7 @@ __device__ bool IntersectQuad(float3* origin, float3* dir, Quad* quad, float* ou
 #endif
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, cudaTextureObject_t vertexBuffers, cudaTextureObject_t arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
+__global__ void Kernel(uchar4* dst, int width, int height, Viewport viewport, float3 entity, size_t bufferPitch) {
 #if 1
     float3 direction;
     {
@@ -136,9 +137,9 @@ __global__ void Kernel(uchar4* dst, int width, int height, cudaTextureObject_t v
         // Opaque pass
 #if 1
         //Quad* buffer = vertexBuffers[renderChunk];
-        uint2 rval = tex1Dfetch<uint2>(vertexBuffers, renderChunk);
+        uint2 rval = tex1D(devPtrs, renderChunk);
         Quad* buffer = (Quad*) (((size_t)rval.y << 32) | rval.x);
-        int size = tex1Dfetch<int>(arraySizes, renderChunk);
+        int size = tex1D(arraySizes, renderChunk);
         for (int j = 0; j < size; j++) {
         //for (int j = 0; j < arraySizes[renderChunk]; j++) {
             // Quads in buffer
@@ -203,6 +204,16 @@ __global__ void Kernel(uchar4* dst, int width, int height, cudaTextureObject_t v
     *dst = make_uchar4(val, checks, 255, 255);
 }
 
+void rtInit(JNIEnv*) {
+    devPtrs.addressMode[0] = cudaAddressModeClamp;
+    devPtrs.filterMode = cudaFilterModePoint;
+    arraySizes.addressMode[0] = cudaAddressModeClamp;
+    arraySizes.filterMode = cudaFilterModePoint;
+
+    desc_devPtrs = cudaCreateChannelDesc<uint2>();
+    desc_arraySizes = cudaCreateChannelDesc<int>();
+}
+
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     g_screenWidth = screenWidth;
     g_screenHeight = screenHeight;
@@ -215,7 +226,7 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     CUDA_TRY(cudaMallocPitch((void**)&kernelOutputBuffer, &g_bufferPitch, g_screenWidth * sizeof(uchar4), g_screenHeight * sizeof(uchar4)));
 }
 
-void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t glTexture, int texHeight, cudaTextureObject_t devicePointers, cudaTextureObject_t arraySizes, const Viewport &viewport, const float3& viewEntity) {
+void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t glTexture, int texHeight, void* d_devPtrs, void* d_arraySizes, const Viewport &viewport, const float3& viewEntity) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
@@ -228,13 +239,18 @@ void rtRaytrace(JNIEnv* env, cudaGraphicsResource_t glTexture, int texHeight, cu
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, viewport, viewEntity, g_bufferPitch);
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
     Log(env, std::to_string(time));
 #endif
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch);
+
+    cudaBindTexture(NULL, devPtrs, d_devPtrs, desc_devPtrs);
+    cudaBindTexture(NULL, arraySizes, d_arraySizes, desc_arraySizes);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, viewport, viewEntity, g_bufferPitch);
+    cudaUnbindTexture(arraySizes);
+    cudaUnbindTexture(devPtrs);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;

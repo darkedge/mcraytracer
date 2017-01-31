@@ -102,8 +102,11 @@ static void* d_devPtrs;
 static void* d_arraySizes;
 
 // Texture objects (passed as arguments to kernel)
-static cudaTextureObject_t t_devPtrs;
-static cudaTextureObject_t t_arraySizes;
+//static cudaTextureObject_t t_devPtrs;
+//static cudaTextureObject_t t_arraySizes;
+
+static const textureReference* t_devPtrs;
+static const textureReference* t_arraySizes;
 
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
@@ -137,6 +140,7 @@ void Init(JNIEnv* env) {
         CUDA_TRY(cudaMalloc(&d_arraySizes, sizeof(h_arraySizes)));
     }
 
+    #if 0
     // Create CUDA texture objects
     {
         cudaResourceDesc resDesc = {};
@@ -166,6 +170,9 @@ void Init(JNIEnv* env) {
         }
         CUDA_TRY(cudaCreateTextureObject(&t_arraySizes, &resDesc, &texDesc, NULL));
     }
+    #endif
+
+    rtInit(env);
 }
 
 void Destroy(JNIEnv* env) {
@@ -181,6 +188,7 @@ void Destroy(JNIEnv* env) {
         texture = 0;
     }
 
+    #if 0
     if (t_devPtrs) {
         cudaDestroyTextureObject(t_devPtrs);
         t_devPtrs = 0;
@@ -190,6 +198,7 @@ void Destroy(JNIEnv* env) {
         cudaDestroyTextureObject(t_arraySizes);
         t_arraySizes = 0;
     }
+    #endif
 
     // Free arrays
     if (d_arraySizes) {
@@ -300,7 +309,7 @@ jint Raytrace(JNIEnv* env) {
     cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
     cudaMemcpy(d_arraySizes, h_arraySizes, sizeof(h_arraySizes), cudaMemcpyHostToDevice);
     
-    rtRaytrace(env, gfxResource, texHeight, t_devPtrs, t_arraySizes, viewport, viewEntity);
+    rtRaytrace(env, gfxResource, texHeight, d_devPtrs, d_arraySizes, viewport, viewEntity);
 
     if (!frameResources.empty()) {
         // Unmap all resources
