@@ -328,3 +328,4 @@ run/
 *.blg
 *.run.xml
 *.synctex.gz
+*.nvvp
