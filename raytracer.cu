@@ -11,28 +11,19 @@ static int g_screenWidth;
 static int g_screenHeight;
 static size_t g_bufferPitch;
 
-// TODO: test texture references (because texture objects are compute 3.0 only)
-//texture<float, 1, cudaReadModeElementType> tex;
-
 // Calculates t for a line starting from s
 // to cross the next integer in terms of ds.
 // Assume s = [0..1], ds is [-1..1]
-__inline__ __device__ float FindFirstT(float s, float ds) {
+inline __device__ float FindFirstT(float s, float ds) {
     return (ds > 0 ? ceilf(s) - s : s - floorf(s)) / fabsf(ds);
-}
-
-// Input is in grid coordinates
-// Output is [0..1]
-__inline__ __host__ __device__ float3 NormalizeGridPosition(float3 f) {
-    return f - floorf(f);
 }
 
 // Transforms a point from world space to grid space [0..1].
 static float3 WorldToGrid(float3 f) {
-    return NormalizeGridPosition(f * (1 / 16.0f));
+    return fracf(f * (1 / 16.0f));
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
+__global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, const Quad** __restrict__ vertexBuffers, const int* __restrict__ arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
     __shared__ Pos4 quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
     float3 direction;
     {
@@ -81,19 +72,20 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
             size = arraySizes[index];
             if (renderChunk.w < size) {
                 Quad q = vertexBuffers[index][renderChunk.w];
-                quads[renderChunk.w].v0 = q.vertices[0].pos;
-                quads[renderChunk.w].v1 = q.vertices[1].pos;
-                quads[renderChunk.w].v2 = q.vertices[2].pos;
-                quads[renderChunk.w].v3 = q.vertices[3].pos;
+                Pos4* dest = &quads[renderChunk.w];
+                dest->v0 = q.vertices[0].pos;
+                dest->v1 = q.vertices[1].pos;
+                dest->v2 = q.vertices[2].pos;
+                dest->v3 = q.vertices[3].pos;
             }
         }
         __syncthreads();
 
         for (int j = 0; j < size; j++) {
-
+            Pos4 q = quads[j];
             // Triangle 1
-            float3 v0v1 = quads[j].v1 - quads[j].v0; // e1
-            float3 v0v2 = quads[j].v2 - quads[j].v0; // e2
+            float3 v0v1 = q.v1 - q.v0; // e1
+            float3 v0v2 = q.v2 - q.v0; // e2
             float3 pvec = cross(direction, v0v2); // P
             float det = dot(v0v1, pvec);
 
@@ -101,7 +93,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
 
             det = 1.0f / det;
 
-            float3 tvec = raypos - quads[j].v0;
+            float3 tvec = raypos - q.v0;
             float u = dot(tvec, pvec) * det;
             if (!(u < 0.0f || u > 1.0f)) {
                 float3 qvec = cross(tvec, v0v1);
@@ -122,7 +114,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
             // Triangle 2
             // TODO: Optimize this further
             det = -det;
-            tvec = raypos - quads[j].v2;
+            tvec = raypos - q.v2;
             u = dot(tvec, pvec) * det;
 
             if (!(u < 0.0f || u > 1.0f)) {
@@ -148,30 +140,42 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
                 renderChunk.x += step.x;
                 if (renderChunk.x < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.x > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxX += step.x / direction.x;
-                raypos = origin + tMaxX * direction;
+                // raypos = tMaxX * direction + origin;
+                raypos.x = __fmaf_rn(tMaxX, direction.x, origin.x);
+                raypos.y = __fmaf_rn(tMaxX, direction.y, origin.y);
+                raypos.z = __fmaf_rn(tMaxX, direction.z, origin.z);
             }
             else {
                 renderChunk.z += step.z;
                 if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += step.z / direction.z;
-                raypos = origin + tMaxZ * direction;
+                // raypos = tMaxZ * direction + origin;
+                raypos.x = __fmaf_rn(tMaxZ, direction.x, origin.x);
+                raypos.y = __fmaf_rn(tMaxZ, direction.y, origin.y);
+                raypos.z = __fmaf_rn(tMaxZ, direction.z, origin.z);
             }
         } else {
             if (tMaxY < tMaxZ) {
                 renderChunk.y += step.y;
                 if (renderChunk.y < 0 || renderChunk.y >= 16) break;
                 tMaxY += step.y / direction.y;
-                raypos = origin + tMaxY * direction;
+                // raypos = tMaxY * direction + origin;
+                raypos.x = __fmaf_rn(tMaxY, direction.x, origin.x);
+                raypos.y = __fmaf_rn(tMaxY, direction.y, origin.y);
+                raypos.z = __fmaf_rn(tMaxY, direction.z, origin.z);
             }
             else {
                 renderChunk.z += step.z;
                 if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += step.z / direction.z;
-                raypos = origin + tMaxZ * direction;
+                // raypos = tMaxZ * direction + origin;
+                raypos.x = __fmaf_rn(tMaxZ, direction.x, origin.x);
+                raypos.y = __fmaf_rn(tMaxZ, direction.y, origin.y);
+                raypos.z = __fmaf_rn(tMaxZ, direction.z, origin.z);
             }
         }
 
-        raypos = NormalizeGridPosition(raypos) * 16.0f;
+        raypos = fracf(raypos) * 16.0f;
     }
 
     {
@@ -225,7 +229,7 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* 
 
     // Transform origin to [0..1]
     origin = WorldToGrid(origin);
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch, (Quad**)devicePointers, (int*)arraySizes, viewport, origin, renderChunkY);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch, (const Quad**)devicePointers, (const int*)arraySizes, viewport, origin, renderChunkY);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;
