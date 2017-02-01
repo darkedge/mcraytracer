@@ -31,6 +31,13 @@ struct Vertex {
     short u2;
 };
 
+struct Pos4 {
+    float3 v0;
+    float3 v1;
+    float3 v2;
+    float3 v3;
+};
+
 struct Quad {
     Vertex vertices[4];
 };

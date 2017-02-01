@@ -4,6 +4,7 @@
 
 // BLOCK_SIZE^2 = max threads per SM / max active blocks
 #define BLOCK_SIZE 8 // JOTARO
+#define EPSILON 0.000001f
 
 static uchar4* kernelOutputBuffer;
 static int g_screenWidth;
@@ -17,20 +18,21 @@ static size_t g_bufferPitch;
 // to cross the next integer in terms of ds.
 // Assume s = [0..1], ds is [-1..1]
 __inline__ __device__ float FindFirstT(float s, float ds) {
-    return (ds > 0 ? ceil(s) - s : s - floorf(s)) / fabsf(ds);
+    return (ds > 0 ? ceilf(s) - s : s - floorf(s)) / fabsf(ds);
 }
 
 // Input is in grid coordinates
 // Output is [0..1]
-__inline__ __device__ float3 NormalizeGridPosition(float3 f) {
+__inline__ __host__ __device__ float3 NormalizeGridPosition(float3 f) {
     return f - floorf(f);
 }
 
 // Transforms a point from world space to grid space [0..1].
-__inline__ __device__ float3 WorldToGrid(float3 f) {
+static float3 WorldToGrid(float3 f) {
     return NormalizeGridPosition(f * (1 / 16.0f));
 }
 
+#if 0
 __device__ bool IntersectTriangle(const float3* const origin, const float3* const v0, const float3* const v1, const float3* const v2, const float3* const dir, float* out_distance) {
     const float3 v0v1 = *v1 - *v0; // e1
     const float3 v0v2 = *v2 - *v0; // e2
@@ -60,12 +62,12 @@ __device__ bool IntersectQuad(const float3* const origin, const float3* const di
     const float3* const v2 = &quad->vertices[2].pos;
     const float3* const v3 = &quad->vertices[3].pos;
 
-    return IntersectTriangle(origin, v0, v1, v2, dir, out_distance) || IntersectTriangle(origin, v0, v2, v3, dir, out_distance);
+    //return IntersectTriangle(origin, v0, v1, v2, dir, out_distance) || IntersectTriangle(origin, v0, v2, v3, dir, out_distance);
 }
+#endif
 
-__global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 entity, size_t bufferPitch) {
-    __shared__ Quad quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
-#if 1
+__global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
+    __shared__ Pos4 quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
     float3 direction;
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -77,117 +79,205 @@ __global__ void Kernel(uchar4* dst, int width, int height, Quad** vertexBuffers,
         float3 point = lerp(viewport.p0, viewport.p1, u) + lerp(viewport.p0, viewport.p2, v) - viewport.p0;
         direction = normalize(point - viewport.origin);
     }
-#if 1
-    // World space
-    float3 origin = entity + viewport.origin;
-
-    float distance = FLT_MAX;
-
-    char renderChunkX = MAX_RENDER_DISTANCE;
-    char renderChunkY = (char)floorf(origin.y / 16.0f);
-    char renderChunkZ = MAX_RENDER_DISTANCE;
-
-    // Transform origin to [0..1]
-    // Same for all threads (precompute?)
-    origin = WorldToGrid(origin);
 
     // = (-1/1) signs of vector dir
-    const char stepX = (direction.x < 0) ? -1 : 1;
-    const char stepY = (direction.y < 0) ? -1 : 1;
-    const char stepZ = (direction.z < 0) ? -1 : 1;
+    char4 step = make_char4(
+        (direction.x < 0) ? -1 : 1,
+        (direction.y < 0) ? -1 : 1,
+        (direction.z < 0) ? -1 : 1,
+        0
+    );
 
     // All positive values
     float tMaxX = FindFirstT(origin.x, direction.x);
     float tMaxY = FindFirstT(origin.y, direction.y);
     float tMaxZ = FindFirstT(origin.z, direction.z);
 
-    // All positive values
-    const float deltaX = (float)stepX / direction.x;
-    const float deltaY = (float)stepY / direction.y;
-    const float deltaZ = (float)stepZ / direction.z;
-
-    unsigned char checks = 0;
     float3 raypos = origin * 16.0f;
-#if 1
-    do {
-        const int renderChunk =
-            renderChunkX * GRID_DIM * 16 +
-            renderChunkZ * 16 +
-            renderChunkY;
-        
-        if (checks < 255) checks += 5;
 
-        // Opaque pass
-#if 1
-        Quad* buffer = vertexBuffers[renderChunk];
-        char threadId = threadIdx.y * BLOCK_SIZE + threadIdx.x;
-        int size = arraySizes[renderChunk];
-        if (threadId < size) {
-            quads[threadId] = buffer[threadId];
+    char4 renderChunk = make_char4(
+        MAX_RENDER_DISTANCE,
+        renderChunkY,
+        MAX_RENDER_DISTANCE,
+        threadIdx.y * BLOCK_SIZE + threadIdx.x
+    );
+
+    float distance = FLT_MAX;
+    int size = 255;
+    while (true) {
+        //int size;
+        {
+            const int index =
+                (renderChunk.x * GRID_DIM << 4) +
+                (renderChunk.z << 4) +
+                renderChunk.y;
+        
+            // Opaque pass
+            size = arraySizes[index];
+            if (renderChunk.w < size) {
+                Quad q = vertexBuffers[index][renderChunk.w];
+                quads[renderChunk.w].v0 = q.vertices[0].pos;
+                quads[renderChunk.w].v1 = q.vertices[1].pos;
+                quads[renderChunk.w].v2 = q.vertices[2].pos;
+                quads[renderChunk.w].v3 = q.vertices[3].pos;
+            }
         }
         __syncthreads();
 
         for (int j = 0; j < size; j++) {
-            // Quads in buffer
-            float dist = FLT_MAX;
-#if 1
-            if (IntersectQuad(&raypos, &direction, &quads[j], &dist)) {
+            float3 v0v1 = quads[j].v1 - quads[j].v0; // e1
+            float3 v0v2 = quads[j].v2 - quads[j].v0; // e2
+            float3 pvec = cross(direction, v0v2); // P
+            float det = dot(v0v1, pvec);
+
+            if (det < EPSILON) goto next;
+
+            det = 1.0f / det;
+
+            float3 tvec = raypos - quads[j].v0;
+            float u = dot(tvec, pvec) * det;
+            if (u < 0.0f || u > 1.0f) goto next;
+
+            float3 qvec = cross(tvec, v0v1);
+            float v = dot(direction, qvec) * det;
+            if (v < 0.0f || u + v > 1.0f) goto next;
+
+            float dist = dot(v0v2, qvec) * det;
+            if (dist < distance) {
+                distance = dist;
+            }
+            continue;
+next:
+            //v0v1 = -v0v1;
+            //v0v2 = -v0v2;
+            //pvec = -pvec;
+            v0v1 = quads[j].v3 - quads[j].v2;
+            v0v2 = quads[j].v0 - quads[j].v2;
+            pvec = cross(direction, v0v2); // P
+            det = dot(v0v1, pvec);
+
+            if (det < EPSILON) continue;
+
+            det = 1.0f / det;
+
+            tvec = raypos - quads[j].v2;
+            u = dot(tvec, pvec) * det;
+            if (u < 0.0f || u > 1.0f) continue;
+
+            qvec = cross(tvec, v0v1);
+            v = dot(direction, qvec) * det;
+            if (v < 0.0f || u + v > 1.0f) continue;
+
+            dist = dot(v0v2, qvec) * det;
+            if (dist < distance) {
+                distance = dist;
+            }
+        #if 0
+            // Triangle 1
+            float3 v0v1 = quads[j].v1 - quads[j].v0; // e1
+            float3 v0v2 = quads[j].v2 - quads[j].v0; // e2
+            float3 pvec = cross(direction, v0v2); // P
+            float det = dot(v0v1, pvec);
+
+            if (det < EPSILON) continue; // Ray does not hit front of quad
+
+            det = 1.0f / det;
+
+            
+            float3 tvec = raypos - quads[j].v0;
+            float u = dot(tvec, pvec) * det;
+            if (u < 0.0f || u > 1.0f) goto next;
+                
+            float3 qvec = cross(tvec, v0v1);
+            {
+                float v = dot(direction, tvec) * det;
+                if (v < 0.0f || u + v > 1.0f) goto next;
+            }
+
+            {
+                float dist = dot(v0v2, qvec) * det;
                 if (dist < distance) {
                     // TODO: Remember quad for texturing etc
                     distance = dist;
                 }
             }
-#endif
+            continue;
+
+            // Triangle 2
+next:
+            v0v1 = quads[j].v3 - quads[j].v0; // e1
+            pvec = cross(direction, v0v1); // P
+            det = dot(v0v2, pvec); //
+
+            det = 1.0f / det;
+
+            {
+                float3 tvec = raypos - quads[j].v0;
+                float u = dot(tvec, pvec) * det;
+                if (u < 0.0f || u > 1.0f) continue;
+
+                float3 qvec = cross(tvec, v0v2);
+                {
+                    float v = dot(direction, tvec) * det;
+                    if (v < 0.0f || u + v > 1.0f) continue;
+                }
+
+                {
+                    float dist = dot(v0v1, qvec) * det;
+                    if (dist < distance) {
+                        // TODO: Remember quad for texturing etc
+                        distance = dist;
+                    }
+                }
+            }
+            continue;
+            #endif
         }
-#endif
+        if (distance != FLT_MAX) break;
 
 #define TODO_RENDER_DISTANCE 1
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
-                renderChunkX += stepX;
-                if (renderChunkX < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkX > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
-                tMaxX += deltaX;
+                renderChunk.x += step.x;
+                if (renderChunk.x < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.x > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxX += step.x / direction.x;
                 raypos = origin + tMaxX * direction;
             }
             else {
-                renderChunkZ += stepZ;
-                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
-                tMaxZ += deltaZ;
+                renderChunk.z += step.z;
+                if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxZ += step.z / direction.z;
                 raypos = origin + tMaxZ * direction;
             }
         } else {
             if (tMaxY < tMaxZ) {
-                renderChunkY += stepY;
-                if (renderChunkY < 0 || renderChunkY >= 16) break;
-                tMaxY += deltaY;
+                renderChunk.y += step.y;
+                if (renderChunk.y < 0 || renderChunk.y >= 16) break;
+                tMaxY += step.y / direction.y;
                 raypos = origin + tMaxY * direction;
             }
             else {
-                renderChunkZ += stepZ;
-                if (renderChunkZ < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunkZ > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
-                tMaxZ += deltaZ;
+                renderChunk.z += step.z;
+                if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
+                tMaxZ += step.z / direction.z;
                 raypos = origin + tMaxZ * direction;
             }
         }
 
         raypos = NormalizeGridPosition(raypos) * 16.0f;
-    } while (distance == FLT_MAX);
-#endif
+    }
 
-    unsigned char val = distance != FLT_MAX ? 255 : 0;
-#endif
-
-#endif
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
         // Invert Y because OpenGL
         int y = height - ((blockIdx.y * blockDim.y) + threadIdx.y + 1);
-        int offset = (y * bufferPitch) + x * sizeof(uchar4);
+        int offset = (y * bufferPitch) + (x << 2); // x * sizeof(uchar4)
         if (offset >= bufferPitch * height) return;
         dst = (uchar4*)(((char*)dst) + offset);
     }
 
-    *dst = make_uchar4(val, checks, 255, 255);
+    unsigned char val = distance != FLT_MAX ? 255 : 0;
+    *dst = make_uchar4(val, 0, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
@@ -221,7 +311,14 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* 
     cudaEventElapsedTime(&time, start, stop);
     Log(env, std::to_string(time));
 #endif
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, (Quad**)devicePointers, (int*)arraySizes, viewport, viewEntity, g_bufferPitch);
+
+    // World space
+    float3 origin = viewEntity + viewport.origin;
+    char renderChunkY = (char)floorf(origin.y / 16.0f);
+
+    // Transform origin to [0..1]
+    origin = WorldToGrid(origin);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch, (Quad**)devicePointers, (int*)arraySizes, viewport, origin, renderChunkY);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;
