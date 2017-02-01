@@ -32,40 +32,6 @@ static float3 WorldToGrid(float3 f) {
     return NormalizeGridPosition(f * (1 / 16.0f));
 }
 
-#if 0
-__device__ bool IntersectTriangle(const float3* const origin, const float3* const v0, const float3* const v1, const float3* const v2, const float3* const dir, float* out_distance) {
-    const float3 v0v1 = *v1 - *v0; // e1
-    const float3 v0v2 = *v2 - *v0; // e2
-    const float3 pvec = cross(*dir, v0v2); // P
-    float det = dot(v0v1, pvec);
-
-    if (det < 0.000001f) return false;
-
-    det = 1.0f / det;
-
-    float3 tvec = *origin - *v0;
-    const float u = dot(tvec, pvec) * det;
-    if (u < 0.0f || u > 1.0f) return false;
-
-    tvec = cross(tvec, v0v1);
-    const float v = dot(*dir, tvec) * det;
-    if (v < 0.0f || u + v > 1.0f) return false;
-
-    *out_distance = dot(v0v2, tvec) * det;
-
-    return true;
-}
-
-__device__ bool IntersectQuad(const float3* const origin, const float3* const dir, const Quad* const quad, float* const out_distance) {
-    const float3* const v0 = &quad->vertices[0].pos;
-    const float3* const v1 = &quad->vertices[1].pos;
-    const float3* const v2 = &quad->vertices[2].pos;
-    const float3* const v3 = &quad->vertices[3].pos;
-
-    //return IntersectTriangle(origin, v0, v1, v2, dir, out_distance) || IntersectTriangle(origin, v0, v2, v3, dir, out_distance);
-}
-#endif
-
 __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Quad** vertexBuffers, int* arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
     __shared__ Pos4 quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
     float3 direction;
@@ -103,9 +69,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
     );
 
     float distance = FLT_MAX;
-    int size = 255;
     while (true) {
-        //int size;
+        int size;
         {
             const int index =
                 (renderChunk.x * GRID_DIM << 4) +
@@ -125,113 +90,55 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, Q
         __syncthreads();
 
         for (int j = 0; j < size; j++) {
-            float3 v0v1 = quads[j].v1 - quads[j].v0; // e1
-            float3 v0v2 = quads[j].v2 - quads[j].v0; // e2
-            float3 pvec = cross(direction, v0v2); // P
-            float det = dot(v0v1, pvec);
 
-            if (det < EPSILON) goto next;
-
-            det = 1.0f / det;
-
-            float3 tvec = raypos - quads[j].v0;
-            float u = dot(tvec, pvec) * det;
-            if (u < 0.0f || u > 1.0f) goto next;
-
-            float3 qvec = cross(tvec, v0v1);
-            float v = dot(direction, qvec) * det;
-            if (v < 0.0f || u + v > 1.0f) goto next;
-
-            float dist = dot(v0v2, qvec) * det;
-            if (dist < distance) {
-                distance = dist;
-            }
-            continue;
-next:
-            //v0v1 = -v0v1;
-            //v0v2 = -v0v2;
-            //pvec = -pvec;
-            v0v1 = quads[j].v3 - quads[j].v2;
-            v0v2 = quads[j].v0 - quads[j].v2;
-            pvec = cross(direction, v0v2); // P
-            det = dot(v0v1, pvec);
-
-            if (det < EPSILON) continue;
-
-            det = 1.0f / det;
-
-            tvec = raypos - quads[j].v2;
-            u = dot(tvec, pvec) * det;
-            if (u < 0.0f || u > 1.0f) continue;
-
-            qvec = cross(tvec, v0v1);
-            v = dot(direction, qvec) * det;
-            if (v < 0.0f || u + v > 1.0f) continue;
-
-            dist = dot(v0v2, qvec) * det;
-            if (dist < distance) {
-                distance = dist;
-            }
-        #if 0
             // Triangle 1
             float3 v0v1 = quads[j].v1 - quads[j].v0; // e1
             float3 v0v2 = quads[j].v2 - quads[j].v0; // e2
             float3 pvec = cross(direction, v0v2); // P
             float det = dot(v0v1, pvec);
 
-            if (det < EPSILON) continue; // Ray does not hit front of quad
+            if (det < EPSILON) continue; // Ray does not hit front face
 
             det = 1.0f / det;
 
-            
             float3 tvec = raypos - quads[j].v0;
             float u = dot(tvec, pvec) * det;
-            if (u < 0.0f || u > 1.0f) goto next;
-                
-            float3 qvec = cross(tvec, v0v1);
-            {
-                float v = dot(direction, tvec) * det;
-                if (v < 0.0f || u + v > 1.0f) goto next;
-            }
+            if (!(u < 0.0f || u > 1.0f)) {
+                float3 qvec = cross(tvec, v0v1);
+                float v = dot(direction, qvec) * det;
 
-            {
-                float dist = dot(v0v2, qvec) * det;
-                if (dist < distance) {
-                    // TODO: Remember quad for texturing etc
-                    distance = dist;
+                if (!(v < 0.0f || u + v > 1.0f)) {
+                    float dist = dot(v0v2, qvec) * det;
+
+                    if (dist < distance) {
+                        distance = dist;
+                    }
+
+                    // Found a hit
+                    continue;
                 }
             }
-            continue;
 
             // Triangle 2
-next:
-            v0v1 = quads[j].v3 - quads[j].v0; // e1
-            pvec = cross(direction, v0v1); // P
-            det = dot(v0v2, pvec); //
+            // TODO: Optimize this further
+            det = -det;
+            tvec = raypos - quads[j].v2;
+            u = dot(tvec, pvec) * det;
 
-            det = 1.0f / det;
+            if (!(u < 0.0f || u > 1.0f)) {
 
-            {
-                float3 tvec = raypos - quads[j].v0;
-                float u = dot(tvec, pvec) * det;
-                if (u < 0.0f || u > 1.0f) continue;
+                float3 qvec = cross(tvec, v0v1);
+                float v = dot(direction, qvec) * det;
 
-                float3 qvec = cross(tvec, v0v2);
-                {
-                    float v = dot(direction, tvec) * det;
-                    if (v < 0.0f || u + v > 1.0f) continue;
-                }
+                if (!(v < 0.0f || u + v > 1.0f)) {
 
-                {
-                    float dist = dot(v0v1, qvec) * det;
+                    float dist = dot(v0v2, qvec) * det;
+
                     if (dist < distance) {
-                        // TODO: Remember quad for texturing etc
                         distance = dist;
                     }
                 }
             }
-            continue;
-            #endif
         }
         if (distance != FLT_MAX) break;
 
