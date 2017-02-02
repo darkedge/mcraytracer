@@ -132,6 +132,8 @@ void Init(JNIEnv* env) {
         CUDA_TRY(cudaMalloc(&d_devPtrs, sizeof(h_devPtrs)));
         CUDA_TRY(cudaMalloc(&d_arraySizes, sizeof(h_arraySizes)));
     }
+
+    cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
 }
 
 void Destroy(JNIEnv* env) {

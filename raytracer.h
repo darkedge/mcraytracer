@@ -39,7 +39,11 @@ struct Pos4 {
 };
 
 struct Quad {
-    Vertex vertices[4];
+    //Vertex vertices[4];
+    Vertex v0;
+    Vertex v1;
+    Vertex v2;
+    Vertex v3;
 };
 
 struct Viewport {

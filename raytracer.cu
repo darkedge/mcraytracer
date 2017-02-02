@@ -24,7 +24,7 @@ static float3 WorldToGrid(float3 f) {
 }
 
 __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, const Quad** __restrict__ vertexBuffers, const int* __restrict__ arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
-    __shared__ Pos4 quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, TODO: Can fit 438!
+    __shared__ Quad quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, 64 * 4 * 28 = 7168 bytes
     float3 direction;
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -71,21 +71,24 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
             // Opaque pass
             size = arraySizes[index];
             if (renderChunk.w < size) {
+                memcpy(quads + renderChunk.w, vertexBuffers[index] + renderChunk.w, sizeof(Quad));
+                #if 0
                 Quad q = vertexBuffers[index][renderChunk.w];
                 Pos4* dest = &quads[renderChunk.w];
                 dest->v0 = q.vertices[0].pos;
                 dest->v1 = q.vertices[1].pos;
                 dest->v2 = q.vertices[2].pos;
                 dest->v3 = q.vertices[3].pos;
+                #endif
             }
         }
         __syncthreads();
 
         for (int j = 0; j < size; j++) {
-            Pos4 q = quads[j];
+            //Pos4 q = quads[j];
             // Triangle 1
-            float3 v0v1 = q.v1 - q.v0; // e1
-            float3 v0v2 = q.v2 - q.v0; // e2
+            float3 v0v1 = quads[j].v1.pos - quads[j].v0.pos; // e1
+            float3 v0v2 = quads[j].v2.pos - quads[j].v0.pos; // e2
             float3 pvec = cross(direction, v0v2); // P
             float det = dot(v0v1, pvec);
 
@@ -93,7 +96,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
 
             det = 1.0f / det;
 
-            float3 tvec = raypos - q.v0;
+            float3 tvec = raypos - quads[j].v0.pos;
             float u = dot(tvec, pvec) * det;
             if (!(u < 0.0f || u > 1.0f)) {
                 float3 qvec = cross(tvec, v0v1);
@@ -114,7 +117,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
             // Triangle 2
             // TODO: Optimize this further
             det = -det;
-            tvec = raypos - q.v2;
+            tvec = raypos - quads[j].v2.pos;
             u = dot(tvec, pvec) * det;
 
             if (!(u < 0.0f || u > 1.0f)) {
