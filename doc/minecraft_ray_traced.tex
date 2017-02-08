@@ -103,14 +103,18 @@ I explain something here that is found in Figure ~\ref{fig:sequence}.
 
 \begin{figure}
   \begin{tikzpicture}
-    \draw[step=1cm,gray,very thin] (-7, 0) grid (8, 5);
+    \draw[step=1cm,gray,very thin] (-5, 0) grid (6, 4);
     % hfov = 102.4478577779882556443232935315
-    % TODO: calc/increase length
-    \draw[very thick] (0.5, 0) -- ++(141.22392888899412782216164676575:3cm);
-    \draw[very thick] (0.5, 0) -- ++(38.77607111100587217783835323425:3cm);
+    \fill[color=gray,opacity=0.3] (0.5, 0.25) -- (-4.0,4.0) -- (5.0,4.0) -- (0.5,0.25);
+    \draw (0.5,0.25) -- (-4.0,4.0);
+    \draw (0.5,0.25) -- (5.0,4.0);
+    \draw[fill] (0.5,0.25) circle (.5ex);
+    %\draw[very thick,->] (0.5,0.25) -- ++(141.22392888899412782216164676575:6cm);
+    %\draw[very thick,->] (0.5,0.25) -- ++(38.77607111100587217783835323425:6cm);
+    %\draw[very thick,->] (0.5,0.25) -- (0.5,4.0);
   \end{tikzpicture}
   \centering
-  \caption{This is a grid.}
+  \caption{A player's default field of view, facing north. Diagonal rays traverse more cells.}
 \end{figure}
 
 \section{Challenges}
