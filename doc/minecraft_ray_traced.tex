@@ -1,9 +1,16 @@
-\documentclass[]{scrartcl}
-
+%\documentclass[]{scrartcl}
+\documentclass[]{article}
+% sans-serif font
+\renewcommand{\familydefault}{\sfdefault}
+% Bibtex citations
 \usepackage{cite}
+% sequence diagrams
+\usepackage{pgf-umlsd}
+% one inch margins
+\usepackage[a4paper, margin=1in]{geometry}
 
 \title{Minecraft: Ray Traced}
-\subtitle{Or: A dynamic acceleration structure for voxel worlds}
+%\subtitle{Or: A dynamic acceleration structure for voxel worlds}
 \author{Marco Jonkers}
 
 \begin{document}
@@ -12,7 +19,7 @@
 
 \begin{abstract}
 This project attempts to implement a GPU ray tracer in the video game Minecraft, using CUDA.
-The ray tracing itself is done in CUDA.
+The ray tracing itself is done in CUDA. At first, I attempt to ray trace the vertex buffers given by Minecraft. Then, I implement my own data structures for increased performance.
 \end{abstract}
 
 \section{Goal}
@@ -24,8 +31,8 @@ Minecraft's world is made up of voxels, which is nice for ray tracing.
 Here I explain how the project is set up and the technologies involved.
 Minecraft is coded in Java.
 The Minecraft Forge project allows me to do two things:
-    Listen to specific events using pre-installed hooks
-    Edit Minecraft bytecode before it is loaded
+  Listen to specific events using pre-installed hooks
+  Edit Minecraft bytecode before it is loaded
 Using Java Native Interface (JNI), I can call into C++ code from Java.
 The C++ code contains the CUDA kernel.
 Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
@@ -33,25 +40,91 @@ Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
 \section{Minecraft Rendering System}
 There are four geometry groups:
 \begin{description}
-    \item[Solid]
-    \item[Mipped Cutout]
-    \item[Cutout]
-    \item[Translucent]
+  \item[Solid] This is solid geometry.
+  \item[Cutout] Used for glass.
+  \item[Mipped Cutout] Identical to Cutout, but mipmapped.
+  \item[Translucent] Used for block which have partial transparency (alpha blending).
 \end{description}
 Every geometry group has its own vertex buffer.
+
+\section{Raytracing Minecraft's Vertex Buffers Directly}
+
+I explain something here that is found in Figure ~\ref{fig:sequence}.
+
+% Code flow structure
+\begin{figure}
+  \centering
+  \begin{sequencediagram}
+    \newthread{minecraft}{Forge Minecraft}{}
+    \newinst[2]{forge}{Forge Mod}{}
+    \newinst[2]{loader}{C++/CUDA}{}
+    \begin{call}{minecraft}{transform()}{forge}{}
+    \end{call}
+    \postlevel
+    \begin{call}{minecraft}{Raytracer()}{forge}{}
+      \begin{call}{forge}{init()}{loader}{}
+      \end{call}
+    \end{call}
+%    \postlevel
+%    \begin{call}{minecraft}{onPreInitGuiEvent()}{forge}{}
+%      \begin{call}{forge}{resize()}{loader}{}
+%      \end{call}
+%    \end{call}
+    \begin{sdblock}{Main Loop}{}
+      \begin{call}{minecraft}{initialize()}{forge}{}
+        \begin{call}{forge}{setViewEntity()}{loader}{}
+        \end{call}
+      \end{call}
+        \postlevel
+        \begin{call}{minecraft}{addRenderChunk()}{forge}{}
+        \end{call}
+        \postlevel
+        \begin{call}{minecraft}{renderChunkLayer()}{forge}{}
+          \begin{call}{forge}{setVertexBuffer()}{loader}{}
+            \begin{call}{loader}{GetIntField()}{loader}{glBufferId}
+            \end{call}
+          \end{call}
+        \end{call}
+        \postlevel
+        \begin{call}{minecraft}{renderWorld()}{forge}{}
+          \begin{call}{forge}{setViewingPlane()}{loader}{}
+          \end{call}
+          \postlevel
+          \begin{call}{forge}{raytrace()}{loader}{texture ID}
+            \begin{call}{loader}{Kernel()}{loader}{}
+            \end{call}
+          \end{call}
+        \end{call}
+    \end{sdblock}
+  \end{sequencediagram}
+  \caption{Sequence diagram showing interaction between the modules}
+  \label{fig:sequence}
+\end{figure}
+
+\begin{figure}
+  \begin{tikzpicture}
+    \draw[step=1cm,gray,very thin] (-7, 0) grid (8, 5);
+    % hfov = 102.4478577779882556443232935315
+    % TODO: calc/increase length
+    \draw[very thick] (0.5, 0) -- ++(141.22392888899412782216164676575:3cm);
+    \draw[very thick] (0.5, 0) -- ++(38.77607111100587217783835323425:3cm);
+  \end{tikzpicture}
+  \centering
+  \caption{This is a grid.}
+\end{figure}
 
 \section{Challenges}
 The challenges of this project include:
 \begin{description}
-    \item [Ray tracing performance] Because of gameplay.
-    \item [Acceleration structure rebuild speed] Because of gameplay.
+  \item [Ray tracing performance] Because of gameplay.
+  \item [Acceleration structure rebuild speed] Because of gameplay.
 \end{description}
 
 \section{Static Geometry}
 Test for citing \cite{amanatides1987fast}.
-\\
+
 I am also citing \cite{ivson2009gpu}.
-\\
+
 I am also citing \cite{reinhard2000dynamic}.
 
 \section{Dynamic Geometry}
