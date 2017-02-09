@@ -8,9 +8,12 @@
 \usepackage{pgf-umlsd}
 % one inch margins
 \usepackage[a4paper, margin=1in]{geometry}
+% url referencing
+\usepackage{url}
 
 \usepackage{tikz}
-\usetikzlibrary{decorations.pathreplacing,angles,quotes}
+% tikz features
+\usetikzlibrary{decorations.pathreplacing,angles,quotes,shapes,arrows,fit}
 
 \title{Minecraft: Ray Traced}
 %\subtitle{Or: A dynamic acceleration structure for voxel worlds}
@@ -25,12 +28,12 @@ This project attempts to implement a GPU ray tracer in the video game Minecraft,
 The ray tracing itself is done in CUDA. At first, I attempt to ray trace the vertex buffers given by Minecraft. Then, I implement my own data structures for increased performance.
 \end{abstract}
 
-\section{Goal}
+\section{Introduction}
 Similar to other ray tracing research projects by Intel Corporation.
 Also shortly explain the benefits of ray tracing versus regular rasterization.
 Minecraft's world is made up of voxels, which is nice for ray tracing.
 
-\section{Setup}
+\section{Project Setup}
 Here I explain how the project is set up and the technologies involved.
 Minecraft is coded in Java.
 The Minecraft Forge project allows me to do two things:
@@ -39,6 +42,15 @@ The Minecraft Forge project allows me to do two things:
 Using Java Native Interface (JNI), I can call into C++ code from Java.
 The C++ code contains the CUDA kernel.
 Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
+
+I am using the Minecraft Forge API.
+Forge is built on top of the Mod Coder Pack (MCP).
+MCP is a tool for decompiling Minecraft.
+A copy of the game is obtained by using the official installer from Mojang.
+Forge uses Gradle.
+During development, Java loads my classpath directly.
+In release mode, my class files would have to be compressed into an archive first.
+The path to my DLLs is passed to the virtual machine.
 
 \section{Minecraft Rendering System}
 There are four geometry groups:
@@ -78,7 +90,8 @@ This section describes ray tracing dynamic objects, such as NPCs.
 Future work is addressed here.
 
 \bibliography{minecraft_ray_traced}{}
-\bibliographystyle{apalike}
+\bibliographystyle{plain}
+%\bibliographystyle{apalike}
 
 \listoffigures
 
@@ -212,5 +225,37 @@ Future work is addressed here.
   \centering
   \caption[Diagram of a RenderChunk]{A single, completely filled RenderChunk.}
 \end{figure}
+
+\tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=4cm]
+\tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners]
+\begin{figure}
+  \begin{tikzpicture}[auto]
+    % loader.dll
+    \node[dll] (loader_dll) {loader.dll};
+    % raytracer.dll
+    \node[dll,right of=loader_dll] (raytracer_dll) {raytracer.dll};
+    % raytracer container
+    \node[java,fit=(loader_dll)] (container) {};
+    % raytracer.class label
+    \node at (container.north)[above](raytracer){Raytracer.class};
+    % mcraytracer container
+    \node[java,fit=(container)(raytracer)](minecraft){};
+    % mcraytracer label
+    \node at (minecraft.north)[above](jar){mcraytracer.jar};
+    % minecraft jar
+    \node[dll,left of=raytracer](minecraft_jar){minecraft.jar};
+    % java container
+    \node[java,fit=(jar)(minecraft)(minecraft_jar)](java){};
+    % VM label
+    \node at (java.north)[above](vm_label){Java Virtual Machine};
+    
+    \draw [->] (loader_dll) -- node {} (raytracer_dll);
+    \draw [<->] (minecraft_jar) -- node {} (minecraft);
+  \end{tikzpicture}
+  \centering
+  \caption[Binary interaction]{Interaction diagram of the different binaries.}
+\end{figure}
+
+% TODO: Java class diagrams(minecraft, raytracer)
 
 \end{document}
