@@ -11,9 +11,21 @@
 % url referencing
 \usepackage{url}
 
-\usepackage{tikz}
+\usepackage{tikz,tkz-euclide}
 % tikz features
 \usetikzlibrary{decorations.pathreplacing,angles,quotes,shapes,arrows,fit}
+\usetikzlibrary{calc} % coordinates
+\usetikzlibrary{arrows.meta} % better arrows
+\usetkzobj{all}
+
+% set default arrow
+\tikzset{>=Latex}
+
+% define arrow style
+\tikzstyle{arw}=[-{Latex[length=3mm]}]
+
+% extra math
+\usepackage{mathtools}
 
 \title{Minecraft: Ray Traced}
 %\subtitle{Or: A dynamic acceleration structure for voxel worlds}
@@ -65,6 +77,8 @@ Every geometry group has its own vertex buffer.
 \section{Raytracing Minecraft's Vertex Buffers Directly}
 
 I explain something here that is found in Figure ~\ref{fig:sequence}.
+\subsection{Viewport and Ray Origin}
+The viewport is passed from Java to C++ using ByteBuffers.
 
 \section{Challenges}
 The challenges of this project include:
@@ -98,6 +112,7 @@ Future work is addressed here.
 % Code flow structure
 \begin{figure}
   \centering
+  \label{fig:sequence}
   \begin{sequencediagram}
     \newthread{minecraft}{Forge Minecraft}{}
     \newinst[2]{forge}{Forge Mod}{}
@@ -142,26 +157,14 @@ Future work is addressed here.
     \end{sdblock}
   \end{sequencediagram}
   \caption[Sequence diagram]{Sequence diagram showing interaction between the modules}
-  \label{fig:sequence}
 \end{figure}
 
+% hfov = 102.4478577779882556443232935315
+% ++(141.22392888899412782216164676575:6cm);
+% ++(38.77607111100587217783835323425:6cm);
+
 \begin{figure}
-  \begin{tikzpicture}
-  \draw[step=1cm,very thin,opacity=0.2] (-5, 0) grid (6, 4);
-  % hfov = 102.4478577779882556443232935315
-  \fill[color=gray,opacity=0.3] (0.5, 0.25) -- (-4.0,4.0) -- (5.0,4.0) -- (0.5,0.25);
-  \draw (0.5,0.25) -- (-4.0,4.0);
-  \draw (0.5,0.25) -- (5.0,4.0);
-  \draw[fill] (0.5,0.25) circle (.5ex);
-  %\draw[very thick,->] (0.5,0.25) -- ++(141.22392888899412782216164676575:6cm);
-  %\draw[very thick,->] (0.5,0.25) -- ++(38.77607111100587217783835323425:6cm);
-  %\draw[very thick,->] (0.5,0.25) -- (0.5,4.0);
-  \end{tikzpicture}
   \centering
-  \caption[Player's field of view]{A player's default field of view, facing north. Diagonal rays traverse more cells.}
-\end{figure}
-
-\begin{figure}
   \begin{tikzpicture}
   \draw[step=0.5cm,very thin,opacity=0.2] (-6,-6) grid (6.5,6.5);
   %\fill (0,0) -- (0.5,0) -- (0.5,0.5) -- (0,0.5) -- (0,0);
@@ -174,13 +177,24 @@ Future work is addressed here.
   \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,6.5) -- node[above=15pt] {35} (6.5,6.5);
   \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,-6) -- node[left=15pt] {35} (-6,6.5);
   \draw[fill] (0.25,0.25) circle (.5ex);
+  
+  % view frustum
+  \draw (0.25,0.25) -- (-6,5.25);
+  \draw (0.25,0.25) -- (6.5,5.25);
+  \fill[color=gray,opacity=0.3] (-6,6.5) -- (-6,5.25) -- (0.25,0.25) -- (6.5,5.25) -- (6.5,6.5);
+  
   %\draw[decoration={brace,mirror,raise=5pt},decorate] (0.5,0) -- node[below=6pt] {Render distance} (6.5,0);
   \end{tikzpicture}
-  \centering
-  \caption[2D View of vertex buffer array]{A two-dimensional view of the vertex buffer array, assuming a render distance of 12. Each cell contains 16 RenderChunks.}
+  \caption[Top-down view of vertex buffer array]{
+    A top-down view of the vertex buffer array, assuming a render distance of 12.
+    The player's view frustum is shown facing north.
+    Each cell contains 16 RenderChunks.
+    When the player crosses a horizontal chunk boundary, the grid is translated instead of the player.
+  }
 \end{figure}
 
 \begin{figure}
+  \centering
   \begin{tikzpicture}[scale=0.3]
   \foreach \x in{0,...,16} {
     \draw[very thin] (0,\x ,16) -- (16,\x ,16);
@@ -222,8 +236,57 @@ Future work is addressed here.
   \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (0,0,16) -- node[below=15pt]{16} (16,0,16);
   \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (16,0,16) -- node[below=15pt,right=10pt]{16} (16,0,0);
   \end{tikzpicture}
-  \centering
   \caption[Diagram of a RenderChunk]{A single, completely filled RenderChunk.}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \begin{tikzpicture}[scale=0.5]
+    \coordinate (A) at (0,0,0);
+    \coordinate (B) at (16,0,0);
+    \coordinate (C) at (0,9,0);
+    \coordinate (D) at (16,9,0);
+    \coordinate (E) at (8,4.5,0);
+    \coordinate (F) at (8,4.5,8);
+    \coordinate (G) at (0,4.5,0);
+    \coordinate (H) at (8,9,0);
+    \coordinate (I) at (0,0,5);
+    \draw[arw] (A) node[anchor=north]{$p_0$} -- (B) node[anchor=north]{$p_1$};
+    \draw[arw] (A) -- (C) node[anchor=south]{$p_2$};
+    %\draw[arw] (A) -- (8,4.5) node[anchor=west]{$p_3$};
+    \draw[dashed] (8,9,0) -- (E);
+    %\draw[dashed] (8,0,0) -- (E);
+    \draw[dashed] (B) -- (D);
+    \draw[dashed] (C) -- (D);
+    %\draw[dashed] (B) -- (C);
+    %\tkzMarkSegment[pos=.5,mark=|](A,(0,4.5,0))
+    %\tkzMarkSegment[pos=.5,mark=|](C,(0,4.5,0))
+    %\tkzMarkSegment[pos=.5,mark=||](A,(8,0,0))
+    %\tkzMarkSegment[pos=.5,mark=||](B,(8,0,0))
+    \tkzMarkRightAngle[draw=black,size=0.5](H,E,F)
+    \tkzMarkRightAngle[draw=black,size=0.5](C,A,I)
+    
+    % eye point stuff
+    \draw[arw] (E) -- (F) node[anchor=north]{$origin$};
+    \draw[arw] (A) -- node[anchor=north west]{$\vec{u}$} (0,0,5);
+    %\draw[dotted] (A) -- (F);
+    %\draw[dotted] (B) -- (F);
+    %\draw[dotted] (C) -- (F);
+    %\draw[dotted] (D) -- (F);
+    \draw[dotted] (H) -- (F);
+%    \tdplotdrawarc[->]{}{2}{0}{90}{}{}
+    \pic [draw, -, "$\theta$", angle eccentricity=1.5] {angle = E--F--H};
+  \end{tikzpicture}
+  
+  %\[p_3 = \frac{p_1 + p_2}{2}\]
+  %\[\vec{v} = \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\cdot\frac{\frac{\lvert\lvert\overrightarrow{p_0p_2}\rvert\rvert}{2}}{\tan\left(\frac{fov}{2}\right)}\]
+  %\[i=\frac{p_1 + p_2}{2} + \vec{v}\]
+  \begin{align}
+  \theta& = \frac{vertical\ field\ of\ view}{2} \nonumber \\
+  \vec{u}& = \overrightarrow{p_0p_1}\times\overrightarrow{p_0p_2} \nonumber \\
+  origin& = \frac{p_1 + p_2}{2} + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\cdot\frac{\frac{\lvert\lvert\overrightarrow{p_0p_2}\rvert\rvert}{2}}{\tan\left(\theta\right)} \label{eq:1}
+  \end{align}
+  \caption{Viewport and ray origin calculations}
 \end{figure}
 
 \tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=4cm]
