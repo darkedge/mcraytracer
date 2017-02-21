@@ -187,9 +187,9 @@ Future work is addressed here.
   \end{tikzpicture}
   \caption[Top-down view of vertex buffer array]{
     A top-down view of the vertex buffer array, assuming a render distance of 12.
-    The player's view frustum is shown facing north.
+    The player's view cone- is shown facing north.
     Each cell contains 16 RenderChunks.
-    When the player crosses a horizontal chunk boundary, the grid is translated instead of the player.
+    When the player crosses a horizontal chunk boundary, every buffer in the grid is move once space.
   }
 \end{figure}
 
@@ -239,6 +239,7 @@ Future work is addressed here.
   \caption[Diagram of a RenderChunk]{A single, completely filled RenderChunk.}
 \end{figure}
 
+% TODO Rotate this diagram 90 degrees along Y axis
 \begin{figure}
   \centering
   \begin{tikzpicture}[scale=0.5]
@@ -247,7 +248,7 @@ Future work is addressed here.
     \coordinate (C) at (0,9,0);
     \coordinate (D) at (16,9,0);
     \coordinate (E) at (8,4.5,0);
-    \coordinate (F) at (8,4.5,8);
+    \coordinate (F) at (8,4.5,16);
     \coordinate (G) at (0,4.5,0);
     \coordinate (H) at (8,9,0);
     \coordinate (I) at (0,0,5);
@@ -309,7 +310,7 @@ Future work is addressed here.
     \node[dll,left of=raytracer](minecraft_jar){minecraft.jar};
     % java container
     \node[java,fit=(jar)(minecraft)(minecraft_jar)](java){};
-    % VM label
+    % vm label
     \node at (java.north)[above](vm_label){Java Virtual Machine};
     
     \draw [->] (loader_dll) -- node {} (raytracer_dll);
