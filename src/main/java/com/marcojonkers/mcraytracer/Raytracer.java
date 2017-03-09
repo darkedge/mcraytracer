@@ -39,7 +39,7 @@ public class Raytracer {
 
     private float textureWidth;
     private float textureHeight;
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     public static final String MODID = "mj_raytracer";
     private static final Logger LOGGER = LogManager.getLogger(MODID);
