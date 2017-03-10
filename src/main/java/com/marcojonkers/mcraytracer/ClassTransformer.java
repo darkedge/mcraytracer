@@ -421,6 +421,266 @@ public class ClassTransformer implements IClassTransformer {
         return writer.toByteArray();
     }
 
+    private byte[] patchChunkRenderDispatcher(String name, byte[] basicClass, boolean obfuscated) {
+        boolean success = true;
+
+        ClassNode classNode = new ClassNode();
+        ClassReader classReader = new ClassReader(basicClass);
+        classReader.accept(classNode, 0);
+
+        MethodNode removeMethod = null;
+        MethodNode addMethod = null;
+
+        for (MethodNode methodNode : classNode.methods) {
+            // Compare method
+            if (methodNode.name.equals("uploadVertexBuffer")) {
+                System.out.println("Found uploadVertexBuffer.");
+
+                // Change instruction
+                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
+
+                int insnIndex = 0;
+
+                // LINENUMBER 303
+                while (instructionNode.hasNext()) {
+                    AbstractInsnNode instruction = instructionNode.next();
+                    if (instruction.getOpcode() == Opcodes.INVOKEVIRTUAL) {
+                        MethodInsnNode node = (MethodInsnNode) instruction;
+                        if (node.name.equals("setVertexBuffer")) {
+                            System.out.println("Found line 303.");
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    insnIndex++;
+                }
+
+                if (targetNode != null) {
+                    AbstractInsnNode remNode0 = methodNode.instructions.get(insnIndex); // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.setVertexBuffer (Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+
+                    methodNode.instructions.insert(remNode0, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/VertexBufferUploader", "setVertexBuffer", "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V", false));
+                    methodNode.instructions.remove(remNode0);
+                } else {
+                    System.out.println("Could not find line 303!");
+                    success = false;
+                    break;
+                }
+
+                // Mark old method for deletion
+                removeMethod = methodNode;
+
+                // Add new method with new instructions
+                addMethod = new MethodNode(
+                        Opcodes.ACC_PRIVATE,
+                        "uploadVertexBuffer",
+                        "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V",
+                        null,
+                        null);
+                addMethod.instructions.add(methodNode.instructions);
+            }
+            if (methodNode.name.equals("uploadChunk")) {
+                System.out.println("Found uploadChunk.");
+
+                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
+
+                int insnIndex = 0;
+
+                // LINENUMBER 263
+                while (instructionNode.hasNext()) {
+                    AbstractInsnNode instruction = instructionNode.next();
+                    if (instruction.getOpcode() == Opcodes.INVOKEVIRTUAL) {
+                        MethodInsnNode node = (MethodInsnNode) instruction;
+                        if (node.name.equals("getVertexBufferByLayer")) {
+                            System.out.println("Found line 263.");
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    insnIndex++;
+                }
+
+                if (targetNode != null) {
+                    AbstractInsnNode remNode0 = methodNode.instructions.get(insnIndex + 0); // INVOKEVIRTUAL net/minecraft/client/renderer/chunk/RenderChunk.getVertexBufferByLayer (I)Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                    AbstractInsnNode remNode1 = methodNode.instructions.get(insnIndex + 1); // INVOKESPECIAL net/minecraft/client/renderer/chunk/ChunkRenderDispatcher.uploadVertexBuffer (Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+
+                    methodNode.instructions.insert(remNode0, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/chunk/RenderChunk", "getVertexBufferByLayer", "(I)Lcom/marcojonkers/mcraytracer/CppVertexBuffer;", false));
+                    methodNode.instructions.remove(remNode0);
+                    methodNode.instructions.insert(remNode1, new MethodInsnNode(Opcodes.INVOKESPECIAL, "net/minecraft/client/renderer/chunk/ChunkRenderDispatcher", "uploadVertexBuffer", "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V", false));
+                    methodNode.instructions.remove(remNode1);
+                } else {
+                    System.out.println("Could not find line 263!");
+                    success = false;
+                    break;
+                }
+            }
+        }
+
+        // Remove method
+        if (removeMethod != null) {
+            System.out.println("Removed old uploadVertexBuffer().");
+            classNode.methods.remove(removeMethod);
+        }
+
+        // Add method
+        if (addMethod != null) {
+            System.out.println("Added new uploadVertexBuffer().");
+            classNode.methods.add(addMethod);
+        }
+
+        System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
+
+        // Crashes when I add ClassWriter.COMPUTE_FRAMES for some reason
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        classNode.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchVertexBufferUploader(String name, byte[] basicClass, boolean obfuscated) {
+        boolean success = true;
+
+        ClassNode classNode = new ClassNode();
+        ClassReader classReader = new ClassReader(basicClass);
+        classReader.accept(classNode, 0);
+
+        MethodNode removeMethod = null;
+        MethodNode addMethod = null;
+
+        FieldNode removeField = null;
+        for (FieldNode fieldNode : classNode.fields) {
+            if (fieldNode.name.equals("vertexBuffer")) {
+                removeField = fieldNode;
+                break;
+            }
+        }
+
+        // Remove old vertexBuffers field
+        if (removeField != null) {
+            classNode.fields.remove(removeField);
+            System.out.println("Removed old vertexBuffer field.");
+        } else {
+            System.out.println("Could not find vertexBuffer field!");
+        }
+
+        // Add new vertexBuffers field
+        classNode.fields.add(
+                new FieldNode(
+                        Opcodes.ACC_PRIVATE,
+                        "vertexBuffer",
+                        "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;",
+                        null,
+                        null
+                )
+        );
+        System.out.println("Added new vertexBuffer field.");
+
+        for (MethodNode methodNode : classNode.methods) {
+            // Compare method
+            if (methodNode.name.equals("setVertexBuffer")) {
+                System.out.println("Found setVertexBuffer.");
+
+                // Change instruction
+                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
+
+                int insnIndex = 0;
+
+                // LINENUMBER 19
+                while (instructionNode.hasNext()) {
+                    AbstractInsnNode instruction = instructionNode.next();
+                    if (instruction.getOpcode() == Opcodes.PUTFIELD) {
+                        FieldInsnNode node = (FieldInsnNode) instruction;
+                        if (node.name.equals("vertexBuffer")) {
+                            System.out.println("Found line 19.");
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    insnIndex++;
+                }
+
+                if (targetNode != null) {
+                    AbstractInsnNode remNode0 = methodNode.instructions.get(insnIndex); // PUTFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+
+                    methodNode.instructions.insert(remNode0, new FieldInsnNode(Opcodes.PUTFIELD, "net/minecraft/client/renderer/VertexBufferUploader", "vertexBuffer", "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;"));
+                    methodNode.instructions.remove(remNode0);
+                } else {
+                    System.out.println("Could not find line 19!");
+                    success = false;
+                    break;
+                }
+
+                // Mark old method for deletion
+                removeMethod = methodNode;
+
+                // Add new method with new instructions
+                addMethod = new MethodNode(
+                        Opcodes.ACC_PUBLIC,
+                        "setVertexBuffer",
+                        "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V",
+                        null,
+                        null);
+                addMethod.instructions.add(methodNode.instructions);
+            }
+            if (methodNode.name.equals("draw")) {
+                System.out.println("Found draw.");
+
+                Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
+                AbstractInsnNode targetNode = null;
+
+                int insnIndex = 0;
+
+                // LINENUMBER 14
+                while (instructionNode.hasNext()) {
+                    AbstractInsnNode instruction = instructionNode.next();
+                    if (instruction.getOpcode() == Opcodes.GETFIELD) {
+                        FieldInsnNode node = (FieldInsnNode) instruction;
+                        if (node.name.equals("vertexBuffer")) {
+                            System.out.println("Found line 14.");
+                            targetNode = node;
+                            break;
+                        }
+                    }
+                    insnIndex++;
+                }
+
+                if (targetNode != null) {
+                    AbstractInsnNode remNode0 = methodNode.instructions.get(insnIndex + 0); // GETFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                    AbstractInsnNode remNode1 = methodNode.instructions.get(insnIndex + 3); // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
+
+                    methodNode.instructions.insert(remNode0, new FieldInsnNode(Opcodes.GETFIELD, "net/minecraft/client/renderer/VertexBufferUploader", "vertexBuffer", "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;"));
+                    methodNode.instructions.remove(remNode0);
+                    methodNode.instructions.insert(remNode1, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "com/marcojonkers/mcraytracer/CppVertexBuffer", "bufferData", "(Ljava/nio/ByteBuffer;)V", false));
+                    methodNode.instructions.remove(remNode1);
+                } else {
+                    System.out.println("Could not find line 14!");
+                    success = false;
+                    break;
+                }
+            }
+        }
+
+        // Remove method
+        if (removeMethod != null) {
+            System.out.println("Removed old setVertexBuffer().");
+            classNode.methods.remove(removeMethod);
+        }
+
+        // Add method
+        if (addMethod != null) {
+            System.out.println("Added new setVertexBuffer().");
+            classNode.methods.add(addMethod);
+        }
+
+        System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
+
+        // Crashes when I add ClassWriter.COMPUTE_FRAMES for some reason
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        classNode.accept(writer);
+        return writer.toByteArray();
+    }
+
     @Override
     // TODO: Obfuscated names
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
@@ -447,6 +707,14 @@ public class ClassTransformer implements IClassTransformer {
 
         if (name.equals("net.minecraft.client.renderer.chunk.RenderChunk")) {
             return patchRenderChunk(name, basicClass, false);
+        }
+
+        if (name.equals("net.minecraft.client.renderer.chunk.ChunkRenderDispatcher")) {
+            return patchChunkRenderDispatcher(name, basicClass, false);
+        }
+
+        if (name.equals("net.minecraft.client.renderer.VertexBufferUploader")) {
+            return patchVertexBufferUploader(name, basicClass, false);
         }
 
         return basicClass;
