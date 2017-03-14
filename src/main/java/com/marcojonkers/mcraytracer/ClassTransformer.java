@@ -4,10 +4,12 @@ import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.Type;
+import jdk.internal.org.objectweb.asm.commons.Method;
 import jdk.internal.org.objectweb.asm.tree.*;
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import net.minecraft.client.renderer.vertex.VertexBuffer;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.launchwrapper.IClassTransformer;
 
@@ -146,7 +148,7 @@ public class ClassTransformer implements IClassTransformer {
     }
 
     private byte[] patchRenderGlobal(String name, byte[] basicClass, boolean obfuscated) {
-        boolean success = false;
+        boolean success = true;
 
         String targetMethodName;
         if (obfuscated) {
@@ -158,6 +160,46 @@ public class ClassTransformer implements IClassTransformer {
         ClassNode classNode = new ClassNode();
         ClassReader classReader = new ClassReader(basicClass);
         classReader.accept(classNode, 0);
+
+        // Change three fields
+        FieldNode starVBO = null;
+        FieldNode skyVBO = null;
+        FieldNode sky2VBO = null;
+        for (FieldNode fieldNode : classNode.fields) {
+            if (fieldNode.name.equals("starVBO")) {
+                starVBO = fieldNode;
+            } else if (fieldNode.name.equals("skyVBO")) {
+                skyVBO = fieldNode;
+            } else if (fieldNode.name.equals("sky2VBO")) {
+                sky2VBO = fieldNode;
+            }
+        }
+
+        classNode.fields.remove(starVBO);
+        classNode.fields.remove(skyVBO);
+        classNode.fields.remove(sky2VBO);
+
+        classNode.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE,
+                "starVBO",
+                "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;",
+                null,
+                null
+        ));
+        classNode.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE,
+                "skyVBO",
+                "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;",
+                null,
+                null
+        ));
+        classNode.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE,
+                "sky2VBO",
+                "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;",
+                null,
+                null
+        ));
 
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
@@ -192,9 +234,44 @@ public class ClassTransformer implements IClassTransformer {
 
                     success = true;
                 }
+            }
 
-                // Stop looking for methods
-                break;
+            if (methodNode.name.equals("generateSky2")) {
+                System.out.println("Found generateSky2.");
+                /*
+                InsnList list = methodNode.instructions;
+
+                // GETFIELD net/minecraft/client/renderer/RenderGlobal.sky2VBO : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) list.get(12)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // GETFIELD net/minecraft/client/renderer/RenderGlobal.sky2VBO : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) list.get(17)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.deleteGlBuffers ()V
+                ((MethodInsnNode) list.get(18)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                // NEW net/minecraft/client/renderer/vertex/VertexBuffer
+                ((TypeInsnNode) list.get(44)).desc = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                // INVOKESPECIAL net/minecraft/client/renderer/vertex/VertexBuffer.<init> (Lnet/minecraft/client/renderer/vertex/VertexFormat;)V
+                ((MethodInsnNode) list.get(48)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                // PUTFIELD net/minecraft/client/renderer/RenderGlobal.sky2VBO : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) list.get(49)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // GETFIELD net/minecraft/client/renderer/RenderGlobal.sky2VBO : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) list.get(68)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
+                ((MethodInsnNode) list.get(71)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                */
+                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer", false);
+            }
+
+            if (methodNode.name.equals("generateSky")) {
+                System.out.println("Found generateSky.");
+                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer", false);
+            }
+            if (methodNode.name.equals("generateStars")) {
+                System.out.println("Found generateStars.");
+                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer", false);
+            }
+            if (methodNode.name.equals("renderSky")) {
+                System.out.println("Found renderSky.");
+                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer", false);
             }
         }
 
@@ -204,6 +281,61 @@ public class ClassTransformer implements IClassTransformer {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         classNode.accept(writer);
         return writer.toByteArray();
+    }
+
+    private String internalNameToDescriptor(String input, boolean array) {
+        StringBuilder sb = new StringBuilder();
+        if (array) sb.append('[');
+        sb.append('L');
+        sb.append(input);
+        sb.append(';');
+        return sb.toString();
+    }
+
+    // input and output are internal names
+    private void changeMethodInstructions(MethodNode node, String input, String output, boolean array) {
+        Iterator<AbstractInsnNode> it = node.instructions.iterator();
+
+        String inputDesc = internalNameToDescriptor(input, array);
+        String outputDesc = internalNameToDescriptor(output, array);
+
+        while (it.hasNext()) {
+            AbstractInsnNode insn = it.next();
+            switch (insn.getOpcode()) {
+                // TypeInsnNode
+                case Opcodes.NEW:
+                case Opcodes.ANEWARRAY:
+                case Opcodes.CHECKCAST:
+                case Opcodes.INSTANCEOF:
+                    TypeInsnNode typeInsnNode = (TypeInsnNode) insn;
+                    if (typeInsnNode.desc.equals(input)) {
+                        typeInsnNode.desc = output;
+                    }
+                    break;
+                // FieldInsnNode
+                case Opcodes.GETSTATIC:
+                case Opcodes.PUTSTATIC:
+                case Opcodes.GETFIELD:
+                case Opcodes.PUTFIELD:
+                    FieldInsnNode fieldInsnNode = (FieldInsnNode) insn;
+                    if (fieldInsnNode.desc.equals(inputDesc)) {
+                        fieldInsnNode.desc = outputDesc;
+                    }
+                    break;
+                // MethodInsnNode
+                case Opcodes.INVOKEVIRTUAL:
+                case Opcodes.INVOKESPECIAL:
+                case Opcodes.INVOKESTATIC:
+                case Opcodes.INVOKEINTERFACE:
+                    MethodInsnNode methodInsnNode = (MethodInsnNode) insn;
+                    if (methodInsnNode.owner.equals(input)) {
+                        methodInsnNode.owner = output;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 
     private byte[] patchRenderChunk(String name, byte[] basicClass, boolean obfuscated) {
@@ -428,14 +560,14 @@ public class ClassTransformer implements IClassTransformer {
         ClassReader classReader = new ClassReader(basicClass);
         classReader.accept(classNode, 0);
 
-        MethodNode removeMethod = null;
-        MethodNode addMethod = null;
+        //MethodNode removeMethod = null;
+        //MethodNode addMethod = null;
 
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
             if (methodNode.name.equals("uploadVertexBuffer")) {
                 System.out.println("Found uploadVertexBuffer.");
-
+                /*
                 // Change instruction
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
                 AbstractInsnNode targetNode = null;
@@ -466,7 +598,13 @@ public class ClassTransformer implements IClassTransformer {
                     success = false;
                     break;
                 }
+                */
 
+                // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.setVertexBuffer (Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(5)).desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
+                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
+
+                /*
                 // Mark old method for deletion
                 removeMethod = methodNode;
 
@@ -478,10 +616,11 @@ public class ClassTransformer implements IClassTransformer {
                         null,
                         null);
                 addMethod.instructions.add(methodNode.instructions);
+                */
             }
             if (methodNode.name.equals("uploadChunk")) {
                 System.out.println("Found uploadChunk.");
-
+                /*
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
                 AbstractInsnNode targetNode = null;
 
@@ -514,9 +653,14 @@ public class ClassTransformer implements IClassTransformer {
                     success = false;
                     break;
                 }
+                */
+                // INVOKEVIRTUAL net/minecraft/client/renderer/chunk/RenderChunk.getVertexBufferByLayer (I)Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((MethodInsnNode) methodNode.instructions.get(16)).desc = "(I)Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // INVOKESPECIAL net/minecraft/client/renderer/chunk/ChunkRenderDispatcher.uploadVertexBuffer (Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(17)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
             }
         }
-
+        /*
         // Remove method
         if (removeMethod != null) {
             System.out.println("Removed old uploadVertexBuffer().");
@@ -528,6 +672,7 @@ public class ClassTransformer implements IClassTransformer {
             System.out.println("Added new uploadVertexBuffer().");
             classNode.methods.add(addMethod);
         }
+        */
 
         System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
 
@@ -544,17 +689,19 @@ public class ClassTransformer implements IClassTransformer {
         ClassReader classReader = new ClassReader(basicClass);
         classReader.accept(classNode, 0);
 
-        MethodNode removeMethod = null;
-        MethodNode addMethod = null;
+        //MethodNode removeMethod = null;
+        //MethodNode addMethod = null;
 
-        FieldNode removeField = null;
+        //FieldNode removeField = null;
         for (FieldNode fieldNode : classNode.fields) {
             if (fieldNode.name.equals("vertexBuffer")) {
-                removeField = fieldNode;
+                //removeField = fieldNode;
+                fieldNode.desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
                 break;
             }
         }
 
+        /*
         // Remove old vertexBuffers field
         if (removeField != null) {
             classNode.fields.remove(removeField);
@@ -562,6 +709,7 @@ public class ClassTransformer implements IClassTransformer {
         } else {
             System.out.println("Could not find vertexBuffer field!");
         }
+
 
         // Add new vertexBuffers field
         classNode.fields.add(
@@ -574,11 +722,14 @@ public class ClassTransformer implements IClassTransformer {
                 )
         );
         System.out.println("Added new vertexBuffer field.");
+        */
 
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
             if (methodNode.name.equals("setVertexBuffer")) {
                 System.out.println("Found setVertexBuffer.");
+
+                /*
 
                 // Change instruction
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
@@ -622,8 +773,13 @@ public class ClassTransformer implements IClassTransformer {
                         null,
                         null);
                 addMethod.instructions.add(methodNode.instructions);
+                */
+                methodNode.desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
+                // PUTFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) methodNode.instructions.get(4)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
             }
             if (methodNode.name.equals("draw")) {
+                /*
                 System.out.println("Found draw.");
 
                 Iterator<AbstractInsnNode> instructionNode = methodNode.instructions.iterator();
@@ -658,9 +814,15 @@ public class ClassTransformer implements IClassTransformer {
                     success = false;
                     break;
                 }
+                */
+                // GETFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) methodNode.instructions.get(7)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(10)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
             }
         }
 
+        /*
         // Remove method
         if (removeMethod != null) {
             System.out.println("Removed old setVertexBuffer().");
@@ -672,6 +834,7 @@ public class ClassTransformer implements IClassTransformer {
             System.out.println("Added new setVertexBuffer().");
             classNode.methods.add(addMethod);
         }
+        */
 
         System.out.println(success ? "Successfully patched " + name + "." : "Could not patch " + name + "!");
 
