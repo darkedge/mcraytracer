@@ -125,7 +125,7 @@ public class ClassTransformer implements IClassTransformer {
         // Change three fields
         for (FieldNode fieldNode : classNode.fields) {
             if (fieldNode.name.equals("starVBO") || fieldNode.name.equals("skyVBO") || fieldNode.name.equals("sky2VBO")) {
-                fieldNode.desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                //fieldNode.desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
             }
         }
 
@@ -135,16 +135,16 @@ public class ClassTransformer implements IClassTransformer {
                 changeMethodInstructions(methodNode, "net/minecraft/client/renderer/VboRenderList", "com/marcojonkers/mcraytracer/RaytracerRenderList");
             }
             if (methodNode.name.equals("generateSky2")) {
-                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
+                //changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
             }
             if (methodNode.name.equals("generateSky")) {
-                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
+                //changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
             }
             if (methodNode.name.equals("generateStars")) {
-                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
+                //changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
             }
             if (methodNode.name.equals("renderSky")) {
-                changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
+                //changeMethodInstructions(methodNode, "net/minecraft/client/renderer/vertex/VertexBuffer", "com/marcojonkers/mcraytracer/CppVertexBuffer");
             }
         }
 
