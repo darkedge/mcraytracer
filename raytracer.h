@@ -23,12 +23,16 @@ do {\
 
 // sizeof(Vertex) should be VERTEX_SIZE_BYTES
 struct Vertex {
+    // Vertex
     float3 pos;
+    // Color
     unsigned char rgba[4];
-    float u0;
-    float v0;
-    short u1;
-    short u2;
+    // Lightmap
+    float lu;
+    float lv;
+    // Texture
+    short tu;
+    short tv;
 };
 
 struct Pos4 {

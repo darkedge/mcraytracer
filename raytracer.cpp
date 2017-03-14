@@ -43,7 +43,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
-    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject);
+    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jobject, jint);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
     MJ_EXPORT void StopProfiling(JNIEnv*);
 }
@@ -286,6 +286,7 @@ void SetViewingPlane(JNIEnv* env, jobject arr) {
     viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
 
+#if 0
 // Currently only called for the opaque pass
 void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, jobject obj) {
     int count = env->GetIntField(obj, jni_VertexBuffer_count);
@@ -337,6 +338,16 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
     translation.z = z;
     translations.push_back(translation);
     frameResources.push_back(allResources[glBufferId]);
+}
+#endif
+
+void InsertQuads(Quad* quads, int numQuads) {
+
+}
+
+void SetVertexBuffer(JNIEnv* env, jobject data, jint size) {
+    Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
+    InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.
