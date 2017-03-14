@@ -3,10 +3,8 @@ package com.marcojonkers.mcraytracer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ChunkRenderContainer;
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.vertex.VertexBuffer;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.Entity;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -20,6 +18,7 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.vector.Vector3f;
 
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
 @Mod(modid = Raytracer.MODID, version = Raytracer.VERSION)
@@ -52,16 +51,9 @@ public class Raytracer {
     private native void resize(int width, int height);
     private native int raytrace();
     public native void setViewingPlane(FloatBuffer buffer);
-    private native void setVertexBuffer(int x, int y, int z, int pass, VertexBuffer buffer);
     public native void setViewEntity(double x, double y, double z);
     public native void stopProfiling();
-
-    // TODO: Group calls together to prevent JNI overhead
-    public void setVertexBuffer(BlockPos pos, int pass, VertexBuffer buffer) {
-        if (enabled) {
-            setVertexBuffer(pos.getX(), pos.getY(), pos.getZ(), pass, buffer);
-        }
-    }
+    public native void setVertexBuffer(ByteBuffer data, int numBytes);
 
     public ChunkRenderContainer renderContainer;
 
