@@ -41,14 +41,6 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewingPla
 
 /*
  * Class:     com_marcojonkers_mcraytracer_Raytracer
- * Method:    setVertexBuffer
- * Signature: (IIIILnet/minecraft/client/renderer/vertex/VertexBuffer;)V
- */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
-  (JNIEnv *, jobject, jint, jint, jint, jint, jobject);
-
-/*
- * Class:     com_marcojonkers_mcraytracer_Raytracer
  * Method:    setViewEntity
  * Signature: (DDD)V
  */
@@ -62,6 +54,14 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
  */
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_stopProfiling
   (JNIEnv *, jobject);
+
+/*
+ * Class:     com_marcojonkers_mcraytracer_Raytracer
+ * Method:    setVertexBuffer
+ * Signature: (Ljava/nio/ByteBuffer;I)V
+ */
+JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
+  (JNIEnv *, jobject, jobject, jint);
 
 #ifdef __cplusplus
 }
