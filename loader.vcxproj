@@ -83,6 +83,7 @@
       <Optimization>Disabled</Optimization>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>%JAVA_HOME%\include;%JAVA_HOME%\include\win32</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4100</DisableSpecificWarnings>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -106,6 +107,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>%JAVA_HOME%\include;%JAVA_HOME%\include\win32</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4100</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

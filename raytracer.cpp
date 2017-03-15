@@ -342,11 +342,10 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 #endif
 
 void InsertQuads(Quad* quads, int numQuads) {
-    quads; numQuads;
+
 }
 
 void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject data, jint size) {
-    x;y;z;
     Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
     InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
 }
