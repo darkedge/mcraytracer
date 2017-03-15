@@ -256,16 +256,33 @@ public class ClassTransformer implements IClassTransformer {
 
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
-            if (methodNode.name.equals("uploadVertexBuffer")) {
-                // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.setVertexBuffer (Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(5)).desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
-                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
-            }
             if (methodNode.name.equals("uploadChunk")) {
                 // INVOKEVIRTUAL net/minecraft/client/renderer/chunk/RenderChunk.getVertexBufferByLayer (I)Lnet/minecraft/client/renderer/vertex/VertexBuffer;
                 ((MethodInsnNode) methodNode.instructions.get(16)).desc = "(I)Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+                // Load RenderChunk local variable
+                methodNode.instructions.insert(methodNode.instructions.get(16), new VarInsnNode(Opcodes.ALOAD, 3));
                 // INVOKESPECIAL net/minecraft/client/renderer/chunk/ChunkRenderDispatcher.uploadVertexBuffer (Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(17)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
+                ((MethodInsnNode) methodNode.instructions.get(17 + 1)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+            }
+            if (methodNode.name.equals("uploadVertexBuffer")) {
+                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                //methodNode.maxLocals++; // Unnecessary due to ClassWriter.COMPUTE_MAXS?
+                methodNode.localVariables.add(new LocalVariableNode(
+                                "foo",
+                                "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
+                                null,
+                                (LabelNode) methodNode.instructions.get(0), // L0
+                                (LabelNode) methodNode.instructions.get(15), // L3
+                                3
+                        )
+                );
+                // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.setVertexBuffer (Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(5)).desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
+
+                // Add RenderChunk param to draw call
+                methodNode.instructions.insert(methodNode.instructions.get(10), new VarInsnNode(Opcodes.ALOAD, 3));
+                // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.draw (Lnet/minecraft/client/renderer/VertexBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(11 + 1)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
             }
         }
 
@@ -291,16 +308,30 @@ public class ClassTransformer implements IClassTransformer {
 
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
+            if (methodNode.name.equals("draw")) {
+                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                methodNode.localVariables.add(new LocalVariableNode(
+                                "foo",
+                                "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
+                                null,
+                                (LabelNode) methodNode.instructions.get(0), // L0
+                                (LabelNode) methodNode.instructions.get(14), // L3
+                                2
+                        )
+                );
+                // GETFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
+                ((FieldInsnNode) methodNode.instructions.get(7)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
+
+                // Load RenderChunk local variable
+                methodNode.instructions.insert(methodNode.instructions.get(9), new VarInsnNode(Opcodes.ALOAD, 2));
+                // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
+                ((MethodInsnNode) methodNode.instructions.get(10 + 1)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                ((MethodInsnNode) methodNode.instructions.get(10 + 1)).desc = "(Ljava/nio/ByteBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+            }
             if (methodNode.name.equals("setVertexBuffer")) {
                 methodNode.desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
                 // PUTFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
                 ((FieldInsnNode) methodNode.instructions.get(4)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
-            }
-            if (methodNode.name.equals("draw")) {
-                // GETFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
-                ((FieldInsnNode) methodNode.instructions.get(7)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
-                // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(10)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
             }
         }
 

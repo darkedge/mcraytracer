@@ -43,7 +43,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
-    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jobject, jint);
+    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject, jint);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
     MJ_EXPORT void StopProfiling(JNIEnv*);
 }
@@ -342,10 +342,11 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 #endif
 
 void InsertQuads(Quad* quads, int numQuads) {
-
+    quads; numQuads;
 }
 
-void SetVertexBuffer(JNIEnv* env, jobject data, jint size) {
+void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject data, jint size) {
+    x;y;z;
     Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
     InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
 }

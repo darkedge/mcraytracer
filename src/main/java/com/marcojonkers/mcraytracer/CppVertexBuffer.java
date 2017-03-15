@@ -1,6 +1,9 @@
 package com.marcojonkers.mcraytracer;
 
+import net.minecraft.client.renderer.block.model.BlockPart;
+import net.minecraft.client.renderer.chunk.RenderChunk;
 import net.minecraft.client.renderer.vertex.VertexFormat;
+import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
@@ -18,9 +21,10 @@ public class CppVertexBuffer {
         // Do nothing
     }
 
-    public void bufferData(ByteBuffer data) {
+    public void bufferData(ByteBuffer data, RenderChunk renderChunk) {
         // Pass to C++
-        Raytracer.getRaytracer().setVertexBuffer(data, data.remaining());
+        BlockPos blockPos = renderChunk.getPosition();
+        Raytracer.getRaytracer().setVertexBuffer(blockPos.getX(), blockPos.getY(), blockPos.getZ(), data, data.remaining());
     }
 
     public void drawArrays(int mode) {
