@@ -266,7 +266,6 @@ public class ClassTransformer implements IClassTransformer {
             }
             if (methodNode.name.equals("uploadVertexBuffer")) {
                 methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
-                //methodNode.maxLocals++; // Unnecessary due to ClassWriter.COMPUTE_MAXS?
                 methodNode.localVariables.add(new LocalVariableNode(
                                 "foo",
                                 "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
