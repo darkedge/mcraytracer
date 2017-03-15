@@ -347,7 +347,7 @@ void InsertQuads(Quad* quads, int numQuads) {
 
 void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject data, jint size) {
     Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
-    InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
+    //InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.
