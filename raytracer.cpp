@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <tuple>
+#include <map>
 
 #include "raytracer.h"
 #include <jni.h>
@@ -43,7 +45,7 @@ extern "C" {
     MJ_EXPORT void Resize(JNIEnv*, jint, jint);
     MJ_EXPORT jint Raytrace(JNIEnv*);
     MJ_EXPORT void SetViewingPlane(JNIEnv*, jobject);
-    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jobject, jint);
+    MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject, jint);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
     MJ_EXPORT void StopProfiling(JNIEnv*);
 }
@@ -345,9 +347,21 @@ void InsertQuads(Quad* quads, int numQuads) {
 
 }
 
-void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jobject data, jint size) {
-    Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
+static int totalTriangles;
+std::map<std::tuple<int, int, int, int>, int> counts;
+
+void SetVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jint layer, jobject data, jint size) {
+    std::tuple<int, int, int, int> coord = std::make_tuple(x, y, z, layer);
+    if (counts.count(coord) == 1) {
+        totalTriangles -= counts.at(coord);
+    }
+    int newtris = size / VERTEX_SIZE_BYTES / 4 * 2;
+    counts[coord] = newtris;
+    //Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
     //InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
+    
+    totalTriangles += newtris;
+    Log(env, std::string("Updated ") + std::to_string(newtris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.

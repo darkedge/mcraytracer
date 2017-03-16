@@ -261,11 +261,12 @@ public class ClassTransformer implements IClassTransformer {
                 ((MethodInsnNode) methodNode.instructions.get(16)).desc = "(I)Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
                 // Load RenderChunk local variable
                 methodNode.instructions.insert(methodNode.instructions.get(16), new VarInsnNode(Opcodes.ALOAD, 3));
+                methodNode.instructions.insert(methodNode.instructions.get(16 + 1), new VarInsnNode(Opcodes.ALOAD, 1));
                 // INVOKESPECIAL net/minecraft/client/renderer/chunk/ChunkRenderDispatcher.uploadVertexBuffer (Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(17 + 1)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                ((MethodInsnNode) methodNode.instructions.get(17 + 2)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;Lnet/minecraft/util/BlockRenderLayer;)V";
             }
             if (methodNode.name.equals("uploadVertexBuffer")) {
-                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lcom/marcojonkers/mcraytracer/CppVertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;Lnet/minecraft/util/BlockRenderLayer;)V";
                 methodNode.localVariables.add(new LocalVariableNode(
                                 "foo",
                                 "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
@@ -275,13 +276,23 @@ public class ClassTransformer implements IClassTransformer {
                                 3
                         )
                 );
+                methodNode.localVariables.add(new LocalVariableNode(
+                                "bar",
+                                "Lnet/minecraft/util/BlockRenderLayer;",
+                                null,
+                                (LabelNode) methodNode.instructions.get(0), // L0
+                                (LabelNode) methodNode.instructions.get(15), // L3
+                                4
+                        )
+                );
                 // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.setVertexBuffer (Lnet/minecraft/client/renderer/vertex/VertexBuffer;)V
                 ((MethodInsnNode) methodNode.instructions.get(5)).desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
 
                 // Add RenderChunk param to draw call
                 methodNode.instructions.insert(methodNode.instructions.get(10), new VarInsnNode(Opcodes.ALOAD, 3));
+                methodNode.instructions.insert(methodNode.instructions.get(10 + 1), new VarInsnNode(Opcodes.ALOAD, 4));
                 // INVOKEVIRTUAL net/minecraft/client/renderer/VertexBufferUploader.draw (Lnet/minecraft/client/renderer/VertexBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(11 + 1)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                ((MethodInsnNode) methodNode.instructions.get(11 + 2)).desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;Lnet/minecraft/util/BlockRenderLayer;)V";
             }
         }
 
@@ -308,7 +319,7 @@ public class ClassTransformer implements IClassTransformer {
         for (MethodNode methodNode : classNode.methods) {
             // Compare method
             if (methodNode.name.equals("draw")) {
-                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                methodNode.desc = "(Lnet/minecraft/client/renderer/VertexBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;Lnet/minecraft/util/BlockRenderLayer;)V";
                 methodNode.localVariables.add(new LocalVariableNode(
                                 "foo",
                                 "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
@@ -318,14 +329,24 @@ public class ClassTransformer implements IClassTransformer {
                                 2
                         )
                 );
+                methodNode.localVariables.add(new LocalVariableNode(
+                                "bar",
+                                "Lnet/minecraft/util/BlockRenderLayer;",
+                                null,
+                                (LabelNode) methodNode.instructions.get(0), // L0
+                                (LabelNode) methodNode.instructions.get(14), // L3
+                                3
+                        )
+                );
                 // GETFIELD net/minecraft/client/renderer/VertexBufferUploader.vertexBuffer : Lnet/minecraft/client/renderer/vertex/VertexBuffer;
                 ((FieldInsnNode) methodNode.instructions.get(7)).desc = "Lcom/marcojonkers/mcraytracer/CppVertexBuffer;";
 
                 // Load RenderChunk local variable
                 methodNode.instructions.insert(methodNode.instructions.get(9), new VarInsnNode(Opcodes.ALOAD, 2));
+                methodNode.instructions.insert(methodNode.instructions.get(9 + 1), new VarInsnNode(Opcodes.ALOAD, 3));
                 // INVOKEVIRTUAL net/minecraft/client/renderer/vertex/VertexBuffer.bufferData (Ljava/nio/ByteBuffer;)V
-                ((MethodInsnNode) methodNode.instructions.get(10 + 1)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
-                ((MethodInsnNode) methodNode.instructions.get(10 + 1)).desc = "(Ljava/nio/ByteBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;)V";
+                ((MethodInsnNode) methodNode.instructions.get(10 + 2)).owner = "com/marcojonkers/mcraytracer/CppVertexBuffer";
+                ((MethodInsnNode) methodNode.instructions.get(10 + 2)).desc = "(Ljava/nio/ByteBuffer;Lnet/minecraft/client/renderer/chunk/RenderChunk;Lnet/minecraft/util/BlockRenderLayer;)V";
             }
             if (methodNode.name.equals("setVertexBuffer")) {
                 methodNode.desc = "(Lcom/marcojonkers/mcraytracer/CppVertexBuffer;)V";
