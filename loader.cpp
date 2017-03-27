@@ -40,9 +40,6 @@ typedef RT_SET_VIEW_ENTITY(SetViewEntityFunc);
 #define RT_STOP_PROFILING(name) void name(JNIEnv*)
 typedef RT_STOP_PROFILING(StopProfilingFunc);
 
-#define RT_DELETE_VERTEX_BUFFER(name) void name(JNIEnv*, jint, jint, jint, jint)
-typedef RT_DELETE_VERTEX_BUFFER(DeleteVertexBufferFunc);
-
 struct Raytracer {
     InitFunc* Init;
     DestroyFunc* Destroy;
@@ -52,7 +49,6 @@ struct Raytracer {
     SetVertexBufferFunc* SetVertexBuffer;
     SetViewEntityFunc* SetViewEntity;
     StopProfilingFunc* StopProfiling;
-    DeleteVertexBufferFunc* DeleteVertexBuffer;
 
     FILETIME DLLLastWriteTime;
     bool valid;
@@ -122,7 +118,6 @@ static Raytracer Load(JNIEnv* env) {
             raytracer.SetVertexBuffer = (SetVertexBufferFunc*)GetProcAddress(raytracer.dll, "SetVertexBuffer");
             raytracer.SetViewEntity = (SetViewEntityFunc*)GetProcAddress(raytracer.dll, "SetViewEntity");
             raytracer.StopProfiling = (StopProfilingFunc*)GetProcAddress(raytracer.dll, "StopProfiling");
-            raytracer.DeleteVertexBuffer = (DeleteVertexBufferFunc*)GetProcAddress(raytracer.dll, "DeleteVertexBuffer");
 
             raytracer.valid = 
                 raytracer.Init &&
@@ -132,8 +127,7 @@ static Raytracer Load(JNIEnv* env) {
                 raytracer.SetViewingPlane &&
                 raytracer.SetVertexBuffer &&
                 raytracer.SetViewEntity &&
-                raytracer.StopProfiling &&
-                raytracer.DeleteVertexBuffer;
+                raytracer.StopProfiling;
 
             if (raytracer.valid) {
                 Log(env, "Successfully (re)loaded Raytracer DLL.");
@@ -153,7 +147,6 @@ static Raytracer Load(JNIEnv* env) {
         raytracer.SetVertexBuffer = NULL;
         raytracer.SetViewEntity = NULL;
         raytracer.StopProfiling = NULL;
-        raytracer.DeleteVertexBuffer = NULL;
     }
 
     return raytracer;
@@ -236,9 +229,4 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setViewEntity
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_stopProfiling
 (JNIEnv* env, jobject) {
     g_raytracer.StopProfiling(env);
-}
-
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_deleteVertexBuffer
-(JNIEnv* env, jobject, jint x, jint y, jint z, jint layer) {
-    g_raytracer.DeleteVertexBuffer(env, x, y, z, layer);
 }

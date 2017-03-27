@@ -63,14 +63,6 @@ JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_stopProfiling
 JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_setVertexBuffer
   (JNIEnv *, jobject, jint, jint, jint, jint, jobject, jint);
 
-/*
- * Class:     com_marcojonkers_mcraytracer_Raytracer
- * Method:    deleteVertexBuffer
- * Signature: (IIII)V
- */
-JNIEXPORT void JNICALL Java_com_marcojonkers_mcraytracer_Raytracer_deleteVertexBuffer
-  (JNIEnv *, jobject, jint, jint, jint, jint);
-
 #ifdef __cplusplus
 }
 #endif

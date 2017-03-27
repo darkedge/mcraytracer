@@ -39,6 +39,7 @@ public class CppVertexBuffer {
     }
 
     public void deleteGlBuffers() {
-        Raytracer.getRaytracer().deleteVertexBuffer(blockPos.getX(), blockPos.getY(), blockPos.getZ(), layer.ordinal());
+        // TODO
+        //Raytracer.getRaytracer().deleteVertexBuffer(blockPos.getX(), blockPos.getY(), blockPos.getZ(), layer);
     }
 }

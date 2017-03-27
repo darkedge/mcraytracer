@@ -54,7 +54,6 @@ public class Raytracer {
     public native void setViewEntity(double x, double y, double z);
     public native void stopProfiling();
     public native void setVertexBuffer(int x, int y, int z, int layer, ByteBuffer data, int numBytes);
-    public native void deleteVertexBuffer(int x, int y, int z, int layer);
 
     public ChunkRenderContainer renderContainer;
 
