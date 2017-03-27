@@ -14,9 +14,13 @@ public class CppVertexBuffer {
     private VertexFormat format; // Probably constant
     private BlockPos blockPos;
     private BlockRenderLayer layer;
+    private static int counter = 0;
+    private int id;
 
     public CppVertexBuffer(VertexFormat vertexFormatIn) {
         this.format = vertexFormatIn;
+        this.id = counter;
+        counter++;
     }
 
     public void bindBuffer() {
@@ -27,7 +31,7 @@ public class CppVertexBuffer {
         // Pass to C++
         this.blockPos = renderChunk.getPosition();
         this.layer = layer;
-        Raytracer.getRaytracer().setVertexBuffer(blockPos.getX(), blockPos.getY(), blockPos.getZ(), layer.ordinal(), data, data.remaining());
+        Raytracer.getRaytracer().setVertexBuffer(id, blockPos.getX(), blockPos.getY(), blockPos.getZ(), layer.ordinal(), data, data.remaining());
     }
 
     public void drawArrays(int mode) {
@@ -39,7 +43,6 @@ public class CppVertexBuffer {
     }
 
     public void deleteGlBuffers() {
-        // TODO
-        //Raytracer.getRaytracer().deleteVertexBuffer(blockPos.getX(), blockPos.getY(), blockPos.getZ(), layer);
+        // Do nothing
     }
 }
