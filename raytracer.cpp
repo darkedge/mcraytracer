@@ -48,6 +48,7 @@ extern "C" {
     MJ_EXPORT void SetVertexBuffer(JNIEnv*, jint, jint, jint, jint, jobject, jint);
     MJ_EXPORT void SetViewEntity(JNIEnv*, jdouble, jdouble, jdouble);
     MJ_EXPORT void StopProfiling(JNIEnv*);
+    MJ_EXPORT void DeleteVertexBuffer(JNIEnv*, jint, jint, jint, jint);
 }
 
 static jfieldID jni_VertexBuffer_count;
@@ -372,4 +373,16 @@ void SetViewEntity(JNIEnv*, jdouble x, jdouble y, jdouble z) {
 void StopProfiling(JNIEnv*) {
     cudaDeviceSynchronize();
     cudaProfilerStop();
+}
+
+void DeleteVertexBuffer(JNIEnv* env, jint x, jint y, jint z, jint layer) {
+    std::tuple<int, int, int, int> coord = std::make_tuple(x, y, z, layer);
+    int numTris = 0;
+    if (counts.count(coord) == 1) {
+        numTris = counts.at(coord);
+        totalTriangles -= numTris;
+    }
+    if (counts.erase(coord) > 0) {
+        Log(env, std::string("Removed ") + std::to_string(numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
+    }
 }
