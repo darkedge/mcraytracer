@@ -466,9 +466,9 @@ void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, j
     counts[id].numTris = size / VERTEX_SIZE_BYTES / 4 * 2;
     totalTriangles += counts[id].numTris;
 
-    int chunkX = x / 16;
+    int chunkX = x / 16 - playerChunkPosition.x + MAX_RENDER_DISTANCE;
     int chunkY = y / 16;
-    int chunkZ = z / 16;
+    int chunkZ = z / 16 - playerChunkPosition.y + MAX_RENDER_DISTANCE;
 
     bufferIndices[chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY] = id;
 
