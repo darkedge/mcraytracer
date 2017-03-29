@@ -15,12 +15,10 @@ public class CppVertexBuffer {
     private BlockPos blockPos;
     private BlockRenderLayer layer;
     private static int counter = 0;
-    private int id;
+    private int id = -1;
 
     public CppVertexBuffer(VertexFormat vertexFormatIn) {
         this.format = vertexFormatIn;
-        this.id = counter;
-        counter++;
     }
 
     public void bindBuffer() {
@@ -28,6 +26,13 @@ public class CppVertexBuffer {
     }
 
     public void bufferData(ByteBuffer data, RenderChunk renderChunk, BlockRenderLayer layer) {
+        // TODO: Use more than just the Opaque layer
+        if (layer.ordinal() != 0) return;
+
+        if (this.id == -1) {
+            this.id = counter;
+            counter++;
+        }
         // Pass to C++
         this.blockPos = renderChunk.getPosition();
         this.layer = layer;

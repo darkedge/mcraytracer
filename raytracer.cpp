@@ -343,6 +343,89 @@ void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, j
 }
 #endif
 
+static int bufferIndices[DEVICE_PTRS_COUNT];
+
+void ShiftGrid(int shiftX, int shiftZ) {
+    if (shiftX != 0 && shiftX < GRID_DIM && shiftX > -GRID_DIM) {
+        if (shiftX > 0) {
+            // Shift right (copy left to right)
+            // Start from right
+            memmove(&bufferIndices[shiftX * GRID_DIM * 16], bufferIndices, (GRID_DIM - shiftX) * GRID_DIM * 16 * sizeof(*bufferIndices));
+            // Invalidate left side
+            for (int x = 0; x < shiftX; x++) {
+                for (int i = 0; i < GRID_DIM * 16; i++) {
+                    bufferIndices[x * GRID_DIM * 16 + i] = -1;
+                }
+            }
+        } else {
+            // Shift left (copy right to left)
+            // Start from left
+            memmove(bufferIndices, &bufferIndices[-shiftX * GRID_DIM * 16], (GRID_DIM + shiftX) * GRID_DIM * 16 * sizeof(*bufferIndices));
+            // Invalidate right side
+            for (int x = GRID_DIM + shiftX; x < GRID_DIM; x++) {
+                for (int i = 0; i < GRID_DIM * 16; i++) {
+                    bufferIndices[x * GRID_DIM * 16 + i] = -1;
+                }
+            }
+        }
+    } else {
+        // Invalidate everything
+        for (int x = 0; x < GRID_DIM; x++) {
+            for (int z = 0; z < GRID_DIM; z++) {
+                for (int i = 0; i < 16; i++) {
+                    bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                }
+            }
+        }
+        return;
+    }
+    if (shiftZ != 0 && shiftZ < GRID_DIM && shiftZ > -GRID_DIM) {
+        if (shiftZ > 0) {
+            // Shift down (copy top to bottom)
+            // Start from bottom
+            for (int x = 0; x < GRID_DIM; x++) {
+                for (int z = GRID_DIM - 1; z >= shiftZ; z--) {
+                    memcpy(&bufferIndices[x * GRID_DIM + z * GRID_DIM * 16], &bufferIndices[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*bufferIndices));
+                }
+            }
+            // Invalidate top side
+            for (int x = 0; x < GRID_DIM; x++) {
+                for (int z = 0; z < shiftZ; z++) {
+                    for (int i = 0; i < 16; i++) {
+                        bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                    }
+                }
+            }
+        } else {
+            // Shift up (copy bottom to top)
+            // Start from top
+            for (int x = 0; x < GRID_DIM; x++) {
+                for (int z = 0; z < -shiftZ; z++) {
+                    memcpy(&bufferIndices[x * GRID_DIM + z * GRID_DIM * 16], &bufferIndices[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*bufferIndices));
+                }
+            }
+            // Invalidate bottom side
+            for (int x = 0; x < GRID_DIM; x++) {
+                for (int z = GRID_DIM + shiftZ; z < GRID_DIM; z++) {
+                    for (int i = 0; i < 16; i++) {
+                        bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                    }
+                }
+            }
+        }
+    } else {
+        // Invalidate everything
+        for (int x = 0; x < GRID_DIM; x++) {
+            for (int z = 0; z < GRID_DIM; z++) {
+                for (int i = 0; i < 16; i++) {
+                    bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                }
+            }
+        }
+        return;
+    }
+}
+
 void InsertQuads(Quad* quads, int numQuads) {
 
 }
@@ -357,11 +440,23 @@ struct VertexBuffer {
 };
 
 static int totalTriangles;
-static VertexBuffer counts[69696];
-static int4 bufferIndices[DEVICE_PTRS_COUNT]; // TODO: Build something like this?
+//static VertexBuffer counts[69696];
+static VertexBuffer counts[17424]; // 33 * 33 * 16 * 1
+//static int4 bufferIndices[DEVICE_PTRS_COUNT]; // TODO: Build something like this?
+static int2 playerChunkPosition;
 
 void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, jobject data, jint size) {
+    // TODO: Just using the Opaque layer for now
+    assert(layer == 0);
+
+    // Input ID = 0..17423
+    // TODO: Probably breaks when changing draw distance due to a static counter in CppVertexBuffer.java
     totalTriangles -= counts[id].numTris;
+    if (counts[id].index == -1) {
+        if (counts[id].x != x || counts[id].y != y || counts[id].z != z) {
+            Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" location changed!"));
+        }
+    }
     counts[id] = {};
     counts[id].index = -1; // TODO
     counts[id].x = x;
@@ -371,15 +466,30 @@ void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, j
     counts[id].numTris = size / VERTEX_SIZE_BYTES / 4 * 2;
     totalTriangles += counts[id].numTris;
 
+    int chunkX = x / 16;
+    int chunkY = y / 16;
+    int chunkZ = z / 16;
+
+    bufferIndices[chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY] = id;
+
     //Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
     //InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
     
-    Log(env, std::string("Updated ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
+    Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" now contains ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.
-void SetViewEntity(JNIEnv*, jdouble x, jdouble y, jdouble z) {
+// Note: I hope this is called before new vertex buffers are being added...
+void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
     viewEntity = float3{(float)x, (float)y, (float)z};
+    int chunkX = (int) floor(x / 16);
+    int chunkZ = (int) floor(z / 16);
+    if (chunkX != playerChunkPosition.x || chunkZ != playerChunkPosition.y) {
+        ShiftGrid(chunkX - playerChunkPosition.x, chunkZ - playerChunkPosition.y);
+        Log(env, std::string("Shifted grid (") + std::to_string(chunkX - playerChunkPosition.x) + std::string(", ") + std::to_string(chunkZ - playerChunkPosition.y) + std::string("), new chunk positon: (") + std::to_string(chunkX) + std::string(", ") + std::to_string(chunkZ) + std::string(")"));
+    }
+    playerChunkPosition.x = chunkX;
+    playerChunkPosition.y = chunkZ;
 }
 
 void StopProfiling(JNIEnv*) {
