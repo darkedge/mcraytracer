@@ -330,3 +330,4 @@ run/
 *.synctex.gz
 *.nvvp
 *.lof
+*.toc

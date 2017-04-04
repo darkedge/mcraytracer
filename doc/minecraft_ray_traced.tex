@@ -1,15 +1,23 @@
 %\documentclass[]{scrartcl}
 \documentclass[]{article}
 % sans-serif font
-\renewcommand{\familydefault}{\sfdefault}
+%\renewcommand{\familydefault}{\sfdefault}
+
 % Bibtex citations
-\usepackage{cite}
+%\usepackage{cite}
 % sequence diagrams
 \usepackage{pgf-umlsd}
 % one inch margins
 \usepackage[a4paper, margin=1in]{geometry}
 % url referencing
 \usepackage{url}
+% show reference and figure lists in table of contents
+\usepackage[nottoc,numbib]{tocbibind}
+% add number to list of figures in table of contents
+\renewcommand{\listoffigures}{\begingroup
+\tocsection
+\tocfile{\listfigurename}{lof}
+\endgroup}
 
 \usepackage{tikz,tkz-euclide}
 % tikz features
@@ -33,19 +41,54 @@
 
 \begin{document}
 
-\maketitle
+%\maketitle
 
-\begin{abstract}
-This project attempts to implement a GPU ray tracer in the video game Minecraft, using CUDA.
-The ray tracing itself is done in CUDA. At first, I attempt to ray trace the vertex buffers given by Minecraft. Then, I implement my own data structures for increased performance.
-\end{abstract}
+\begin{titlepage}
+  \centering
+  \includegraphics[scale=0.5]{eng_logofc_uas.jpg}\par\vspace{1cm}
+  {\scshape\LARGE NHTV Breda University of Applied Sciences\par}
+  \vspace{1cm}
+  {\scshape\Large Personal project\par}
+  \vspace{1.5cm}
+  {\huge\bfseries Minecraft: Ray Traced\par}
+  \vspace{2cm}
+  {\Large Marco Jonkers\par}
+  \vspace{0.5cm}
+  {Supervisor: David H{\"o}rchner\par}
+
+  
+  \vspace{2cm}
+  
+  \begin{abstract}
+    This project attempts to implement a GPU ray tracer in the video game Minecraft, using CUDA.
+    The ray tracing itself is done in CUDA. At first, I attempt to ray trace the vertex buffers given by Minecraft. Then, I implement my own data structures for increased performance.
+  \end{abstract}
+  
+  \vfill
+  
+  % Bottom of the page
+  {\large \today\par}
+\end{titlepage}
+
+
+
+\newpage
+\tableofcontents
+\newpage
 
 \section{Introduction}
+Minecraft is a video game developed and published by Mojang.
+In Minecraft, the game world is mostly comprised of unit blocks.
 Similar to other ray tracing research projects by Intel Corporation.
 Also shortly explain the benefits of ray tracing versus regular rasterization.
 Minecraft's world is made up of voxels, which is nice for ray tracing.
 
-\section{Project Setup}
+\begin{figure}
+  \includegraphics[width=\textwidth]{ss-worldgen.png}
+  \centering
+\end{figure}
+
+\section{Minecraft Forge}
 Here I explain how the project is set up and the technologies involved.
 Minecraft is coded in Java.
 The Minecraft Forge project allows me to do two things:
@@ -64,7 +107,9 @@ During development, Java loads my classpath directly.
 In release mode, my class files would have to be compressed into an archive first.
 The path to my DLLs is passed to the virtual machine.
 
-\section{Minecraft Rendering System}
+\section{Minecraft}
+
+\subsection{Minecraft Rendering System}
 There are four geometry groups:
 \begin{description}
   \item[Solid] This is solid geometry.
@@ -74,7 +119,11 @@ There are four geometry groups:
 \end{description}
 Every geometry group has its own vertex buffer.
 
-\section{Raytracing Minecraft's Vertex Buffers Directly}
+\section{Minecraft Forge}
+
+\subsection{Coremods}
+
+\section{Ray Tracing OpenGL Vertex Buffers}
 
 I explain something here that is found in Figure ~\ref{fig:sequence}.
 \subsection{Viewport and Ray Origin}
@@ -94,11 +143,10 @@ I am also citing \cite{ivson2009gpu}.
 
 I am also citing \cite{reinhard2000dynamic}.
 
-\section{Dynamic Geometry}
-This section describes ray tracing dynamic objects, such as NPCs.
-
+% TODO
 \section{Benchmarks}
 
+\section{Vertex Buffer Preprocessing}
 
 \section{Future work}
 Future work is addressed here.
