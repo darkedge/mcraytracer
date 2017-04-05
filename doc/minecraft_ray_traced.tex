@@ -70,7 +70,7 @@
   {\large \today\par}
 \end{titlepage}
 
-
+% TODO: Do I want to keep the list of figures?
 
 \newpage
 \tableofcontents
@@ -95,6 +95,31 @@ mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
   \label{fig:ss-worldgen}
 \end{figure}
 
+\subsection{World Generation}
+
+\subsection{Renderer}
+Minecraft uses multi-threaded chunk generation.
+Minecraft uses OpenGL.
+Minecraft has two options for rendering static geometry:
+\begin{description}
+  \item[Display Lists] An OpenGL 1.0 core function.
+    Display Lists are a group of OpenGL commands that have been compiled and sent to the GPU.
+    An object can then be drawn by calling the list.
+    The list can be reused, which means you do not have to send the data over again.
+  \item[Vertex Buffer Objects] Vertex Buffer Objects ("VBOs") were available in OpenGL 1.4 through an extension, and were later added to the core specification in version 2.1.
+    This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
+\end{description}
+My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
+\subsubsection{RenderChunks}
+There are four geometry groups:
+\begin{description}
+  \item[Solid] This is solid geometry.
+  \item[Cutout] Used for glass.
+  \item[Mipped Cutout] Identical to Cutout, but mipmapped.
+  \item[Translucent] Used for block which have partial transparency (alpha blending).
+\end{description}
+Every geometry group has its own vertex buffer.
+
 \section{Minecraft Forge}
 Minecraft Forge ("Forge") is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
 \subsection{Setting up a mod development environment}
@@ -113,6 +138,13 @@ The Gradle tasks include:
   \item Generate the Forge Minecraft binary
 \end{enumerate}
 
+Forge explicitly supports the Eclipse and IntelliJ integrated development environments ("IDEs").
+I used IntelliJ IDEA Community.
+ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
+
+\subsection{Changes to Minecraft source code}
+
+
 \subsection{Creating a mod}
 In general there are three approaches to creating a mod:
 \begin{enumerate}
@@ -124,11 +156,23 @@ For most mods, the first approach is sufficient.
 This also enables the developer to freely distribute their mod.
 Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
 
-\subsection{First attempt}
+\section{C++ and CUDA}
+
+\subsection{Java Native Interface}
+
+\subsection{CUDA/OpenGL interoperability}
+
+\subsection{Creating a Visual Studio project}
+
+\subsection{Setting up the Visual Studio debugger}
+
+\section{Ray Tracing OpenGL Vertex Buffers}
+
+\subsection{Using events}
 I wanted to see if I could make my mod work using the first approach.
 Forge adds hooks to the game loop which I could use to intercept the rendering code.
 
-\subsection{Second attempt}
+\subsection{Using Java ASM}
 
 Here I explain how the project is set up and the technologies involved.
 
@@ -148,46 +192,10 @@ During development, Java loads my classpath directly.
 In release mode, my class files would have to be compressed into an archive first.
 The path to my DLLs is passed to the virtual machine.
 
-\section{Minecraft}
-
-\subsection{Minecraft Rendering System}
-There are four geometry groups:
-\begin{description}
-  \item[Solid] This is solid geometry.
-  \item[Cutout] Used for glass.
-  \item[Mipped Cutout] Identical to Cutout, but mipmapped.
-  \item[Translucent] Used for block which have partial transparency (alpha blending).
-\end{description}
-Every geometry group has its own vertex buffer.
-
-\section{Minecraft Forge}
-
-\subsection{Coremods}
-
-\section{Ray Tracing OpenGL Vertex Buffers}
 
 I explain something here that is found in Figure ~\ref{fig:sequence}.
-\subsection{Viewport and Ray Origin}
-The viewport is passed from Java to C++ using ByteBuffers.
 
-\section{Challenges}
-The challenges of this project include:
-\begin{description}
-  \item [Ray tracing performance] Because of gameplay.
-  \item [Acceleration structure rebuild speed] Because of gameplay.
-\end{description}
-
-\section{Static Geometry}
-Test for citing \cite{amanatides1987fast}.
-
-I am also citing \cite{ivson2009gpu}.
-
-I am also citing \cite{reinhard2000dynamic}.
-
-% TODO
-\section{Benchmarks}
-
-\section{Vertex Buffer Preprocessing}
+\section{Preprocessing Vertex Buffers}
 
 \section{Future work}
 Future work is addressed here.
