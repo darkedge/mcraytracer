@@ -1,7 +1,7 @@
 %\documentclass[]{scrartcl}
 \documentclass[]{article}
 % sans-serif font
-%\renewcommand{\familydefault}{\sfdefault}
+\renewcommand{\familydefault}{\sfdefault}
 
 % Bibtex citations
 %\usepackage{cite}
@@ -76,21 +76,62 @@
 \tableofcontents
 \newpage
 
-\section{Introduction}
-Minecraft is a video game developed and published by Mojang.
-In Minecraft, the game world is mostly comprised of unit blocks.
-Similar to other ray tracing research projects by Intel Corporation.
-Also shortly explain the benefits of ray tracing versus regular rasterization.
-Minecraft's world is made up of voxels, which is nice for ray tracing.
+\section{Minecraft}
+Minecraft is a 2011 first-person sandbox video game.
+Originally created by Markus "Notch" Persson, it is currently maintained by Mojang.
+
+
+Minecraft comes in multiple editions, for various platforms. This paper focuses on the PC version of Minecraft, released for Windows, macOS, and Linux.
+The PC version is written in Java.
+
+In Minecraft, the game world consists of a three-dimensional grid.
+The world is procedurally generated, using a 
+mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
 
 \begin{figure}
   \includegraphics[width=\textwidth]{ss-worldgen.png}
   \centering
+  \caption{In-game screenshot of Minecraft, without heads-up display (HUD) or viewmodel.}
+  \label{fig:ss-worldgen}
 \end{figure}
 
 \section{Minecraft Forge}
+Minecraft Forge ("Forge") is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
+\subsection{Setting up a mod development environment}
+The Mod Development Kit ("MDK") can be downloaded from the Forge website\footnote{\url{http://files.minecraftforge.net/}}.
+The MDK distribution includes ForgeGradle\footnote{\url{https://github.com/MinecraftForge/ForgeGradle}}.
+ForgeGradle is a plugin for the Gradle\footnote{\url{https://gradle.org/}} build system.
+The Minecraft binaries are downloaded, and subsequently decompiled, deobfuscated, 
+
+
+The Mod Coder Pack\footnote{\url{http://www.modcoderpack.com/website/}} is a package which is used to decompile, change, and recompile Minecraft Java classes.
+
+The Gradle tasks include:
+\begin{enumerate}
+  \item Download Minecraft .jar files.
+  \item Decompile the Minecraft 
+  \item Generate the Forge Minecraft binary
+\end{enumerate}
+
+\subsection{Creating a mod}
+In general there are three approaches to creating a mod:
+\begin{enumerate}
+  \item Build a mod on top of the Forge Minecraft code
+  \item Edit the Minecraft source directly
+  \item Change the Minecraft bytecode at runtime
+\end{enumerate}
+For most mods, the first approach is sufficient.
+This also enables the developer to freely distribute their mod.
+Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
+
+\subsection{First attempt}
+I wanted to see if I could make my mod work using the first approach.
+Forge adds hooks to the game loop which I could use to intercept the rendering code.
+
+\subsection{Second attempt}
+
 Here I explain how the project is set up and the technologies involved.
-Minecraft is coded in Java.
+
 The Minecraft Forge project allows me to do two things:
   Listen to specific events using pre-installed hooks
   Edit Minecraft bytecode before it is loaded
