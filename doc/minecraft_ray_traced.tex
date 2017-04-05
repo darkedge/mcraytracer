@@ -148,11 +148,12 @@ In general there are three approaches to creating a mod:
 \begin{enumerate}
   \item Build a mod on top of the Forge Minecraft code
   \item Edit the Minecraft source directly
-  \item Change the Minecraft bytecode at runtime
+  \item Use class transformers in custom mod loading
 \end{enumerate}
 For most mods, the first approach is sufficient.
 This also enables the developer to freely distribute their mod.
 Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
+
 
 \section{C++ and CUDA}
 I wanted to create a GPU ray tracer.
@@ -166,27 +167,64 @@ There exist Java bindings for CUDA, but using C++ removes my dependency on a bin
 Java Native Interface ("JNI") is a programming framework that allows for Java code to interact with native code.
 \subsection{CUDA/OpenGL interoperability}
 
+
 \subsection{Creating a Visual Studio project}
 For setting up the native part of the mod, I created a Visual Studio CUDA project.
+
+% TODO: fix the minecraft.jar node and add Forge Minecraft
+\tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=3.5cm]
+\tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners,node distance=3.5cm,minimum width=8em,minimum height=4em]
+\begin{figure}
+  \begin{tikzpicture}[auto]
+  % loader.dll
+  \node[dll] (loader_dll) {loader.dll};
+  % raytracer.dll
+  \node[dll,right of=loader_dll] (raytracer_dll) {raytracer.dll};
+  % Raytracer.class
+  \node[java,fit=(loader_dll)] (container) {};
+  % Raytracer.class label
+  \node at (container.north)[above](raytracer){Raytracer.class};
+  % mcraytracer.jar
+  \node[java,fit=(container)(raytracer)](minecraft){};
+  % mcraytracer.jar label
+  \node at (minecraft.north)[above](jar){mcraytracer.jar};
+  % minecraft jar
+  \node[java,left of=raytracer](minecraft_jar){minecraft.jar};
+  % Forge Minecraft
+  \node[java,below of=minecraft_jar](forge_minecraft){Forge Minecraft};
+  \node[java,right of=forge_minecraft](external_libraries){External libraries};
+  % Java Virtual Machine
+  \node[java,fit=(jar)(minecraft)(minecraft_jar)(forge_minecraft)(external_libraries)](java){};
+  % Java Virtual Machine label
+  \node at (java.north)[above](vm_label){Java Virtual Machine};
+  
+  \draw [->] (loader_dll) -- node {} (raytracer_dll);
+  %\draw [<->] (minecraft_jar) -- node {} (minecraft);
+  \end{tikzpicture}
+  \centering
+  \caption[Binary interaction]{Interaction diagram of the different binaries.}
+  \label{fig:modules}
+\end{figure}
 
 \subsubsection{Reloading C++}
 Java IDEs such as IntelliJ support hot-swapping of method bodies by using the HotSwap\texttrademark functionality of the Java Platform Debugger Architecture.
 I created something similar for my native code by using a technique called DLL reloading.
 Once a native library has been loaded by the JVM, I cannot make changes to it.
 Therefore I am using a passthrough DLL, which passes the calls from Java to another DLL.
+I have shown this in Figure \ref{fig:modules}.
 
 \subsection{Setting up the Visual Studio debugger}
 IntelliJ debug sessions are good for testing if my Java ASM works correctly, and if my JNI bindings are set up properly.
 However, if an error occurs a native part, the debug session ends immediately.
 The crash output from IntelliJ is unable to use the debug information from Visual Studio.
 I wanted to use the Visual Studio debugger for the native part.
-Getting that working was quite tricky.
 I had to launch java.exe with the right command line arguments and working directory.
 I looked at the launch parameters given to java.exe when starting a debug session from IntelliJ.
-The Visual Studio debugger can be started by copying the command line arguments from an IntelliJ debug session.
-
+The Visual Studio debugger can be configured to launch Minecraft by copying the command line arguments from an IntelliJ debug session.
 
 \section{Ray Tracing OpenGL Vertex Buffers}
+My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
+
 
 \subsection{Using events}
 I wanted to see if I could make my mod work using the first approach.
@@ -211,43 +249,14 @@ Forge uses Gradle.
 During development, Java loads my classpath directly.
 In release mode, my class files would have to be compressed into an archive first.
 The path to my DLLs is passed to the virtual machine.
-I have shown this in Figure \ref{fig:modules}.
-
-% TODO: fix the minecraft.jar node and add Forge Minecraft
-\tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=4cm]
-\tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners]
-\begin{figure}
-  \begin{tikzpicture}[auto]
-  % loader.dll
-  \node[dll] (loader_dll) {loader.dll};
-  % raytracer.dll
-  \node[dll,right of=loader_dll] (raytracer_dll) {raytracer.dll};
-  % raytracer container
-  \node[java,fit=(loader_dll)] (container) {};
-  % raytracer.class label
-  \node at (container.north)[above](raytracer){Raytracer.class};
-  % mcraytracer container
-  \node[java,fit=(container)(raytracer)](minecraft){};
-  % mcraytracer label
-  \node at (minecraft.north)[above](jar){mcraytracer.jar};
-  % minecraft jar
-  \node[java,left of=raytracer](minecraft_jar){minecraft.jar};
-  % java container
-  \node[java,fit=(jar)(minecraft)(minecraft_jar)](java){};
-  % vm label
-  \node at (java.north)[above](vm_label){Java Virtual Machine};
-  
-  \draw [->] (loader_dll) -- node {} (raytracer_dll);
-  %\draw [<->] (minecraft_jar) -- node {} (minecraft);
-  \end{tikzpicture}
-  \centering
-  \caption[Binary interaction]{Interaction diagram of the different binaries.}
-  \label{fig:modules}
-\end{figure}
 
 \section{Preprocessing Vertex Buffers}
 
 \subsection{Obtaining the buffers}
+In order to get the raw vertex buffers from Java to C++, I had to change x Minecraft classes:
+\begin{itemize}
+  \item 
+\end{itemize}
 
 \subsection{Acceleration structure}
 
