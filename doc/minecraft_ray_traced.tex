@@ -95,9 +95,7 @@ mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
   \label{fig:ss-worldgen}
 \end{figure}
 
-\subsection{World Generation}
-
-\subsection{Renderer}
+\section{Minecraft Renderer}
 Minecraft uses multi-threaded chunk generation.
 Minecraft uses OpenGL.
 Minecraft has two options for rendering static geometry:
@@ -110,7 +108,7 @@ Minecraft has two options for rendering static geometry:
     This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
 \end{description}
 My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
-\subsubsection{RenderChunks}
+\subsection{RenderChunks}
 There are four geometry groups:
 \begin{description}
   \item[Solid] This is solid geometry.
@@ -127,7 +125,7 @@ The Mod Development Kit ("MDK") can be downloaded from the Forge website\footnot
 The MDK distribution includes ForgeGradle\footnote{\url{https://github.com/MinecraftForge/ForgeGradle}}.
 ForgeGradle is a plugin for the Gradle\footnote{\url{https://gradle.org/}} build system.
 The Minecraft binaries are downloaded, and subsequently decompiled, deobfuscated, 
-
+The classes are decompiled into srg names.
 
 The Mod Coder Pack\footnote{\url{http://www.modcoderpack.com/website/}} is a package which is used to decompile, change, and recompile Minecraft Java classes.
 
@@ -143,7 +141,7 @@ I used IntelliJ IDEA Community.
 ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
 
 \subsection{Changes to Minecraft source code}
-
+Forge adds some new features to the Minecraft source code, in order to support multi-mod functionality.
 
 \subsection{Creating a mod}
 In general there are three approaches to creating a mod:
@@ -157,14 +155,36 @@ This also enables the developer to freely distribute their mod.
 Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
 
 \section{C++ and CUDA}
+I wanted to create a GPU ray tracer.
+There are various methods to achieve this. 
+I wanted to take advantage of the vertex buffers in CUDA.
+Because Minecraft uses OpenGL through the LWJGL\footnote{\url{https://www.lwjgl.org/}} library, I could have chosen to use OpenGL compute shaders.
+However, I have no experience with OpenGL compute shaders, whereas I do have experience with NVIDIA CUDA.
 
+There exist Java bindings for CUDA, but using C++ removes my dependency on a binding layer.
 \subsection{Java Native Interface}
-
+Java Native Interface ("JNI") is a programming framework that allows for Java code to interact with native code.
 \subsection{CUDA/OpenGL interoperability}
 
 \subsection{Creating a Visual Studio project}
+For setting up the native part of the mod, I created a Visual Studio CUDA project.
+
+\subsubsection{Reloading C++}
+Java IDEs such as IntelliJ support hot-swapping of method bodies by using the HotSwap\texttrademark functionality of the Java Platform Debugger Architecture.
+I created something similar for my native code by using a technique called DLL reloading.
+Once a native library has been loaded by the JVM, I cannot make changes to it.
+Therefore I am using a passthrough DLL, which passes the calls from Java to another DLL.
 
 \subsection{Setting up the Visual Studio debugger}
+IntelliJ debug sessions are good for testing if my Java ASM works correctly, and if my JNI bindings are set up properly.
+However, if an error occurs a native part, the debug session ends immediately.
+The crash output from IntelliJ is unable to use the debug information from Visual Studio.
+I wanted to use the Visual Studio debugger for the native part.
+Getting that working was quite tricky.
+I had to launch java.exe with the right command line arguments and working directory.
+I looked at the launch parameters given to java.exe when starting a debug session from IntelliJ.
+The Visual Studio debugger can be started by copying the command line arguments from an IntelliJ debug session.
+
 
 \section{Ray Tracing OpenGL Vertex Buffers}
 
@@ -191,14 +211,50 @@ Forge uses Gradle.
 During development, Java loads my classpath directly.
 In release mode, my class files would have to be compressed into an archive first.
 The path to my DLLs is passed to the virtual machine.
+I have shown this in Figure \ref{fig:modules}.
 
-
-I explain something here that is found in Figure ~\ref{fig:sequence}.
+% TODO: fix the minecraft.jar node and add Forge Minecraft
+\tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=4cm]
+\tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners]
+\begin{figure}
+  \begin{tikzpicture}[auto]
+  % loader.dll
+  \node[dll] (loader_dll) {loader.dll};
+  % raytracer.dll
+  \node[dll,right of=loader_dll] (raytracer_dll) {raytracer.dll};
+  % raytracer container
+  \node[java,fit=(loader_dll)] (container) {};
+  % raytracer.class label
+  \node at (container.north)[above](raytracer){Raytracer.class};
+  % mcraytracer container
+  \node[java,fit=(container)(raytracer)](minecraft){};
+  % mcraytracer label
+  \node at (minecraft.north)[above](jar){mcraytracer.jar};
+  % minecraft jar
+  \node[java,left of=raytracer](minecraft_jar){minecraft.jar};
+  % java container
+  \node[java,fit=(jar)(minecraft)(minecraft_jar)](java){};
+  % vm label
+  \node at (java.north)[above](vm_label){Java Virtual Machine};
+  
+  \draw [->] (loader_dll) -- node {} (raytracer_dll);
+  %\draw [<->] (minecraft_jar) -- node {} (minecraft);
+  \end{tikzpicture}
+  \centering
+  \caption[Binary interaction]{Interaction diagram of the different binaries.}
+  \label{fig:modules}
+\end{figure}
 
 \section{Preprocessing Vertex Buffers}
 
+\subsection{Obtaining the buffers}
+
+\subsection{Acceleration structure}
+
 \section{Future work}
-Future work is addressed here.
+I only got to work on the world rendering of the game.
+Viewmodels (player-held items) are not ray traced.
+Non-playable characters ("NPCs") are not ray traced.
 
 \bibliography{minecraft_ray_traced}{}
 \bibliographystyle{plain}
@@ -385,36 +441,6 @@ Future work is addressed here.
   origin& = \frac{p_1 + p_2}{2} + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\cdot\frac{\frac{\lvert\lvert\overrightarrow{p_0p_2}\rvert\rvert}{2}}{\tan\left(\theta\right)} \label{eq:1}
   \end{align}
   \caption{Viewport and ray origin calculations}
-\end{figure}
-
-\tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=4cm]
-\tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners]
-\begin{figure}
-  \begin{tikzpicture}[auto]
-    % loader.dll
-    \node[dll] (loader_dll) {loader.dll};
-    % raytracer.dll
-    \node[dll,right of=loader_dll] (raytracer_dll) {raytracer.dll};
-    % raytracer container
-    \node[java,fit=(loader_dll)] (container) {};
-    % raytracer.class label
-    \node at (container.north)[above](raytracer){Raytracer.class};
-    % mcraytracer container
-    \node[java,fit=(container)(raytracer)](minecraft){};
-    % mcraytracer label
-    \node at (minecraft.north)[above](jar){mcraytracer.jar};
-    % minecraft jar
-    \node[dll,left of=raytracer](minecraft_jar){minecraft.jar};
-    % java container
-    \node[java,fit=(jar)(minecraft)(minecraft_jar)](java){};
-    % vm label
-    \node at (java.north)[above](vm_label){Java Virtual Machine};
-    
-    \draw [->] (loader_dll) -- node {} (raytracer_dll);
-    \draw [<->] (minecraft_jar) -- node {} (minecraft);
-  \end{tikzpicture}
-  \centering
-  \caption[Binary interaction]{Interaction diagram of the different binaries.}
 \end{figure}
 
 % TODO: Java class diagrams(minecraft, raytracer)
