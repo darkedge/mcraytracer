@@ -35,6 +35,11 @@
 % extra math
 \usepackage{mathtools}
 
+\makeatletter
+\newcommand*\bigcdot{\mathpalette\bigcdot@{.5}}
+\newcommand*\bigcdot@[2]{\mathbin{\vcenter{\hbox{\scalebox{#2}{$\m@th#1\bullet$}}}}}
+\makeatother
+
 \title{Minecraft: Ray Traced}
 %\subtitle{Or: A dynamic acceleration structure for voxel worlds}
 \author{Marco Jonkers}
@@ -445,50 +450,40 @@ Non-playable characters ("NPCs") are not ray traced.
   \centering
   \begin{tikzpicture}[scale=0.5]
     \coordinate (A) at (0,0,0);
-    \coordinate (B) at (16,0,0);
+    \coordinate (B) at (0,0,16);
     \coordinate (C) at (0,9,0);
-    \coordinate (D) at (16,9,0);
-    \coordinate (E) at (8,4.5,0);
-    \coordinate (F) at (8,4.5,16);
+    \coordinate (D) at (0,9,16);
+    \coordinate (E) at (0,4.5,8);
+    \coordinate (F) at (-8,4.5,8);
     \coordinate (G) at (0,4.5,0);
-    \coordinate (H) at (8,9,0);
-    \coordinate (I) at (0,0,5);
-    \draw[arw] (A) node[anchor=north]{$p_0$} -- (B) node[anchor=north]{$p_1$};
-    \draw[arw] (A) -- (C) node[anchor=south]{$p_2$};
-    %\draw[arw] (A) -- (8,4.5) node[anchor=west]{$p_3$};
-    \draw[dashed] (8,9,0) -- (E);
-    %\draw[dashed] (8,0,0) -- (E);
+    \coordinate (H) at (0,9,8);
+    \coordinate (I) at (-5,0,0);
+    \draw[arw] (A) node[anchor=north]{$P$} -- (B) node[anchor=north]{$Q$};
+    \draw[arw] (A) -- (C) node[anchor=south]{$R$};
+    \draw[dotted] (H) -- (E);
     \draw[dashed] (B) -- (D);
     \draw[dashed] (C) -- (D);
-    %\draw[dashed] (B) -- (C);
-    %\tkzMarkSegment[pos=.5,mark=|](A,(0,4.5,0))
-    %\tkzMarkSegment[pos=.5,mark=|](C,(0,4.5,0))
-    %\tkzMarkSegment[pos=.5,mark=||](A,(8,0,0))
-    %\tkzMarkSegment[pos=.5,mark=||](B,(8,0,0))
     \tkzMarkRightAngle[draw=black,size=0.5](H,E,F)
     \tkzMarkRightAngle[draw=black,size=0.5](C,A,I)
+    \tkzMarkRightAngle[draw=black,size=0.5](C,G,E)
+    \tkzMarkSegment[pos=.75,mark=|](A,C)
+    \tkzMarkSegment[pos=.25,mark=|](A,C)
     
     % eye point stuff
-    \draw[arw] (E) -- (F) node[anchor=north]{$origin$};
-    \draw[arw] (A) -- node[anchor=north west]{$\vec{u}$} (0,0,5);
-    %\draw[dotted] (A) -- (F);
-    %\draw[dotted] (B) -- (F);
-    %\draw[dotted] (C) -- (F);
-    %\draw[dotted] (D) -- (F);
+    \draw[dotted] (E) node[anchor=north west]{$S$} -- (F) node[anchor=north]{$O$};
+    \draw[arw] (A) -- node[anchor=north west]{$\vec{u}$} (I);
     \draw[dotted] (H) -- (F);
-%    \tdplotdrawarc[->]{}{2}{0}{90}{}{}
+    \draw[dotted] (G) -- (E);
     \pic [draw, -, "$\theta$", angle eccentricity=1.5] {angle = E--F--H};
   \end{tikzpicture}
   
-  %\[p_3 = \frac{p_1 + p_2}{2}\]
-  %\[\vec{v} = \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\cdot\frac{\frac{\lvert\lvert\overrightarrow{p_0p_2}\rvert\rvert}{2}}{\tan\left(\frac{fov}{2}\right)}\]
-  %\[i=\frac{p_1 + p_2}{2} + \vec{v}\]
   \begin{align}
   \theta& = \frac{vertical\ field\ of\ view}{2} \nonumber \\
-  \vec{u}& = \overrightarrow{p_0p_1}\times\overrightarrow{p_0p_2} \nonumber \\
-  origin& = \frac{p_1 + p_2}{2} + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\cdot\frac{\frac{\lvert\lvert\overrightarrow{p_0p_2}\rvert\rvert}{2}}{\tan\left(\theta\right)} \label{eq:1}
+  \vec{u}& = \overrightarrow{PQ}\times\overrightarrow{PR} \nonumber \\
+  S& = \frac{Q + R}{2} \nonumber \\
+  O& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \label{eq:1}
   \end{align}
-  \caption{Viewport and ray origin calculations}
+  \caption{Ray origin calculations}
 \end{figure}
 
 % TODO: Java class diagrams(minecraft, raytracer)
