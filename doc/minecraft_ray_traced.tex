@@ -296,36 +296,47 @@ This project is developed on the following machines:
 My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
 
 
-\subsection{Using events}
+\subsection{Forge Events}
 I wanted to see if I could make my mod work using the first approach.
 Forge adds hooks to the game loop which I could use to intercept the rendering code.
 The \texttt{Raytracer} class listens to the following events:
 \begin{itemize}
-  \item \texttt{FMLInitializationEvent}
+  \item \texttt{FMLInitializationEvent} \\
+    As the name indicates, this event is fired when Forge is initializing Minecraft.
+    This event is used to initialize the mod.
+    Here I also obtain a reference to the \texttt{Minecraft} singleton class.
+    The mod needs to be registered in the \texttt{ClientRegistry} in order to receive further Forge events.
   \item \texttt{TickEvent.ClientTickEvent} \\
-    
+    This event is fired 20 times per second, and can be regarded as the client-sided update function.
+    I listen to this event to check for keyboard input changes.
   \item \texttt{GuiScreenEvent.InitGuiEvent.Pre} \\
-    
-  \item \texttt{GuiScreenEvent.DrawScreenEvent.Pre} \\
-    
-  \item \texttt{GuiScreenEvent.DrawScreenEvent.Post} \\
-    
-  \item \texttt{GuiOpenEvent} \\
-    Fired when the top-level menu changes.
+    This is the first event that is fired when a window resize is detected.
+    The event does not contain any resize information, so I track it manually.
+    The resolution information in the \texttt{Minecraft} class is public, so I extract it from there.
+    The information is passed to C++, such that the CUDA and OpenGL resources can be resized if they need to be.
+    OpenGL supports resizing by calling \texttt{glTexImage2D} with the new information, without having to call \texttt{glGenTextures} again.
+    In CUDA, it is required to unregister and re-register the associated graphics resource.
+    The kernel output buffer is also resized. This uses a pair of \texttt{cudaFree} and \texttt{cudaMalloc} calls.
+
+    % TODO: something about OpenGL textures and power of two?
   \item \texttt{TickEvent.RenderTickEvent} \\
+    This event is fired when Minecraft starts rendering the next frame.
     
+    In order to prevent Minecraft from drawing the world after I have done the ray tracing, I copy the \texttt{WorldClient} reference from \texttt{Minecraft}, and set the value in \texttt{Minecraft} to \texttt{null}.
+    This effectively causes Minecraft to skip the rendering of the game world, because it has an internal check for the \texttt{WorldClient} there.
+    If it is \texttt{null}, nothing is rendered.
+    However, this also disables rendering of the game overlay, which contains elements like the player inventory and menu's.
+    I manually draw the game overlay after drawing the ray tracing result to the screen.
+  \item \texttt{GuiScreenEvent.DrawScreenEvent.Pre} \& \texttt{GuiScreenEvent.DrawScreenEvent.Post} \\
+    I noticed that the background of the game overlay was solid instead of transparent.
+    This is due to another check for the \texttt{WorldClient} instance during drawing.
+    Because I previously made it \texttt{null}, I now have to restore it on the \texttt{GuiScreenEvent.DrawScreenEvent.Pre} event in order to draw the background.
+    I set it back to null at the \texttt{GuiScreenEvent.DrawScreenEvent.Post} event.
+  %\item \texttt{GuiOpenEvent} \\
+    %Fired when the top-level menu changes.
 \end{itemize}
 
 \subsection{Using Java ASM}
-
-Here I explain how the project is set up and the technologies involved.
-
-The Minecraft Forge project allows me to do two things:
-  Listen to specific events using pre-installed hooks
-  Edit Minecraft bytecode before it is loaded
-Using Java Native Interface (JNI), I can call into C++ code from Java.
-The C++ code contains the CUDA kernel.
-Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
 
 \subsection{C++/CUDA}
 \texttt{cudaGraphicsGLRegisterBuffer}
