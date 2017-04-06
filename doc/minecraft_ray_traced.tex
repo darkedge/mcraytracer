@@ -14,10 +14,10 @@
 % show reference and figure lists in table of contents
 \usepackage[nottoc,numbib]{tocbibind}
 % add number to list of figures in table of contents
-\renewcommand{\listoffigures}{\begingroup
-\tocsection
-\tocfile{\listfigurename}{lof}
-\endgroup}
+%\renewcommand{\listoffigures}{\begingroup
+%\tocsection
+%\tocfile{\listfigurename}{lof}
+%\endgroup}
 
 \usepackage{tikz,tkz-euclide}
 % tikz features
@@ -25,6 +25,9 @@
 \usetikzlibrary{calc} % coordinates
 \usetikzlibrary{arrows.meta} % better arrows
 \usetkzobj{all}
+
+% real numbers symbol
+\usepackage{amssymb}
 
 % set default arrow
 \tikzset{>=Latex}
@@ -35,6 +38,10 @@
 % extra math
 \usepackage{mathtools}
 
+% icons!
+\usepackage{fontawesome}
+
+% bigger dot for multiplication
 \makeatletter
 \newcommand*\bigcdot{\mathpalette\bigcdot@{.5}}
 \newcommand*\bigcdot@[2]{\mathbin{\vcenter{\hbox{\scalebox{#2}{$\m@th#1\bullet$}}}}}
@@ -79,6 +86,7 @@
 
 \newpage
 \tableofcontents
+%\listoffigures
 \newpage
 
 \section{Minecraft}
@@ -114,13 +122,20 @@ Minecraft has two options for rendering static geometry:
 \end{description}
 My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
 \subsection{RenderChunks}
-There are four geometry groups:
+There are four geometry groups, based on texture properties.
 \begin{description}
-  \item[Solid] This is solid geometry.
-  \item[Cutout] Used for glass.
+  \item[Solid] Uses textures that are fully opaque. Most world blocks are in this group.
+  \item[Cutout] Uses textures that have transparent texels.
   \item[Mipped Cutout] Identical to Cutout, but mipmapped.
   \item[Translucent] Used for block which have partial transparency (alpha blending).
 \end{description}
+
+\begin{figure}
+  \includegraphics[width=\textwidth]{ss-layers.png}
+  \centering
+  \caption{From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
+  \label{fig:ss-layers}
+\end{figure}
 Every geometry group has its own vertex buffer.
 
 \section{Minecraft Forge}
@@ -249,18 +264,29 @@ Visual Studio 2017 offers an option to ignore certain exceptions per module, all
 \subsection{Kernel overhead on Windows}
 
 \section{Hardware}
-This project is developed on a Dell XPS 15 L502X with the following specifications:
-\begin{itemize}
-  \item Operating System: Microsoft Windows 10 Pro 64-bit% Version 1607 (Build 14393.447)
-  \item Processor: Intel Core i7-2630QM
-  \item Memory: 4 GB Dual-Channel DDR3 665MHz
-  \item Graphics Processing Unit: NVIDIA GeForce GT 540M
-  \begin{itemize}
-    \item CUDA Cores: 96
-    \item Shader Multiprocessors: 2
-    \item Compute Capability: 2.1
-  \end{itemize}
-\end{itemize}
+This project is developed on the following machines:
+
+\begin{center}
+  \begin{tabular}{| l || c | c |} \hline
+    & Dell XPS 15 L502X & Desktop \\ \hline
+    Operating System & \multicolumn{2}{c|}{Microsoft Windows 10 Pro 64-bit} \\ \hline
+    Processor & Intel Core i7-2630QM & Intel Core i7-4790 \\ \hline
+    Memory & 4 GB DDR3 & 8 GB DDR3 \\ \hline \hline
+    GPU & NVIDIA GeForce GT 540M & NVIDIA GeForce GTX 970\\ \hline
+    - CUDA Cores & 96 & 1664 \\ \hline
+    - Shader Multiprocessors & 2 & 13 \\ \hline
+    - Compute Capability & 2.1 & 5.2 \\ \hline
+  \end{tabular}
+\end{center}
+
+\begin{equation}
+  f(s, ds) =
+  \begin{cases}
+    \frac{\lceil s \rceil - s}{\lvert ds \rvert} & ds > 0 \\
+    \frac{s - \lfloor s \rfloor}{\lvert ds \rvert} & ds < 0 \\
+    \infty & ds = 0
+  \end{cases}
+\end{equation}
 
 \section{Ray Tracing OpenGL Vertex Buffers}
 My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
@@ -269,6 +295,22 @@ My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
 \subsection{Using events}
 I wanted to see if I could make my mod work using the first approach.
 Forge adds hooks to the game loop which I could use to intercept the rendering code.
+The \texttt{Raytracer} class listens to the following events:
+\begin{itemize}
+  \item \texttt{FMLInitializationEvent} - Poep in een drol.
+  \item \texttt{TickEvent.ClientTickEvent} \\
+    
+  \item \texttt{GuiScreenEvent.InitGuiEvent.Pre} \\
+    
+  \item \texttt{GuiScreenEvent.DrawScreenEvent.Pre} \\
+    
+  \item \texttt{GuiScreenEvent.DrawScreenEvent.Post} \\
+    
+  \item \texttt{GuiOpenEvent} \\
+    Fired when the top-level menu changes.
+  \item \texttt{TickEvent.RenderTickEvent} \\
+    
+\end{itemize}
 
 \subsection{Using Java ASM}
 
@@ -280,6 +322,9 @@ The Minecraft Forge project allows me to do two things:
 Using Java Native Interface (JNI), I can call into C++ code from Java.
 The C++ code contains the CUDA kernel.
 Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
+
+\subsection{C++/CUDA}
+\texttt{cudaGraphicsGLRegisterBuffer}
 
 \subsection{Results}
 
@@ -311,8 +356,6 @@ Non-playable characters ("NPCs") are not ray traced.
 \bibliography{minecraft_ray_traced}{}
 \bibliographystyle{plain}
 %\bibliographystyle{apalike}
-
-\listoffigures
 
 % Code flow structure
 \begin{figure}
@@ -470,7 +513,7 @@ Non-playable characters ("NPCs") are not ray traced.
     \tkzMarkSegment[pos=.25,mark=|](A,C)
     
     % eye point stuff
-    \draw[dotted] (E) node[anchor=north west]{$S$} -- (F) node[anchor=north]{$O$};
+    \draw[dotted] (E) node[anchor=north west]{$S$} -- (F) node[anchor=north]{\faVideoCamera};
     \draw[arw] (A) -- node[anchor=north west]{$\vec{u}$} (I);
     \draw[dotted] (H) -- (F);
     \draw[dotted] (G) -- (E);
@@ -481,7 +524,7 @@ Non-playable characters ("NPCs") are not ray traced.
   \theta& = \frac{vertical\ field\ of\ view}{2} \nonumber \\
   \vec{u}& = \overrightarrow{PQ}\times\overrightarrow{PR} \nonumber \\
   S& = \frac{Q + R}{2} \nonumber \\
-  O& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \label{eq:1}
+  \text{\faVideoCamera}_{pos}& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \label{eq:1}
   \end{align}
   \caption{Ray origin calculations}
 \end{figure}
