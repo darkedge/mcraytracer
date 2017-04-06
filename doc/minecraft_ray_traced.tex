@@ -140,6 +140,12 @@ Forge explicitly supports the Eclipse and IntelliJ integrated development enviro
 I used IntelliJ IDEA Community.
 ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
 
+The path to my DLLs is passed to the virtual machine.
+
+\subsection{Differences between development and release builds}
+During development, Java loads my classpath directly.
+In release mode, my class files would have to be compressed into an archive first.
+
 \subsection{Changes to Minecraft source code}
 Forge adds some new features to the Minecraft source code, in order to support multi-mod functionality.
 
@@ -165,13 +171,22 @@ However, I have no experience with OpenGL compute shaders, whereas I do have exp
 There exist Java bindings for CUDA, but using C++ removes my dependency on a binding layer.
 \subsection{Java Native Interface}
 Java Native Interface ("JNI") is a programming framework that allows for Java code to interact with native code.
+\subsection{CUDA}
+CUDA is a parallel computing platform and programming model developed by NVIDIA.
+It is only compatible with NVIDIA hardware.
+CUDA has two APIs: Runtime and Driver.
 \subsection{CUDA/OpenGL interoperability}
-
+CUDA provides an API for operating on OpenGL primitives.
+\begin{enumerate}
+  \item Run the ray tracing kernel
+  \item Map the OpenGL texture to a CUDA array
+  \item Copy the kernel output buffer to the CUDA array
+\end{enumerate}
 
 \subsection{Creating a Visual Studio project}
 For setting up the native part of the mod, I created a Visual Studio CUDA project.
+NVIDIA has a CUDA plugin for Visual Studio called Nsight.
 
-% TODO: fix the minecraft.jar node and add Forge Minecraft
 \tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=3.5cm]
 \tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners,node distance=3.5cm,minimum width=8em,minimum height=4em]
 \begin{figure}
@@ -207,13 +222,13 @@ For setting up the native part of the mod, I created a Visual Studio CUDA projec
 \end{figure}
 
 \subsubsection{Reloading C++}
-Java IDEs such as IntelliJ support hot-swapping of method bodies by using the HotSwap\texttrademark functionality of the Java Platform Debugger Architecture.
+Java IDEs such as IntelliJ support hot-swapping of method bodies by using the HotSwap functionality of the Java Platform Debugger Architecture.
 I created something similar for my native code by using a technique called DLL reloading.
 Once a native library has been loaded by the JVM, I cannot make changes to it.
 Therefore I am using a passthrough DLL, which passes the calls from Java to another DLL.
 I have shown this in Figure \ref{fig:modules}.
 
-\subsection{Setting up the Visual Studio debugger}
+\subsubsection{Setting up the Visual Studio debugger}
 IntelliJ debug sessions are good for testing if my Java ASM works correctly, and if my JNI bindings are set up properly.
 However, if an error occurs a native part, the debug session ends immediately.
 The crash output from IntelliJ is unable to use the debug information from Visual Studio.
@@ -221,6 +236,26 @@ I wanted to use the Visual Studio debugger for the native part.
 I had to launch java.exe with the right command line arguments and working directory.
 I looked at the launch parameters given to java.exe when starting a debug session from IntelliJ.
 The Visual Studio debugger can be configured to launch Minecraft by copying the command line arguments from an IntelliJ debug session.
+The JVM uses the access violation signal internally for its memory exception handling.
+When an access violation is thrown from the JVM, this can be safely ignored.
+However, Visual Studio can easily block hundreds of these signals.
+Visual Studio 2017 offers an option to ignore certain exceptions per module, allowing me to break on access violations in my own native code while ignoring those coming from the JVM.
+
+\subsection{Kernel overhead on Windows}
+
+\section{Hardware}
+This project is developed on a Dell XPS 15 L502X with the following specifications:
+\begin{itemize}
+  \item Operating System: Microsoft Windows 10 Pro 64-bit% Version 1607 (Build 14393.447)
+  \item Processor: Intel Core i7-2630QM
+  \item Memory: 4 GB Dual-Channel DDR3 665MHz
+  \item Graphics Processing Unit: NVIDIA GeForce GT 540M
+  \begin{itemize}
+    \item CUDA Cores: 96
+    \item Shader Multiprocessors: 2
+    \item Compute Capability: 2.1
+  \end{itemize}
+\end{itemize}
 
 \section{Ray Tracing OpenGL Vertex Buffers}
 My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
@@ -241,22 +276,25 @@ Using Java Native Interface (JNI), I can call into C++ code from Java.
 The C++ code contains the CUDA kernel.
 Data is passed between OpenGL and CUDA using CUDA's graphics interop layer.
 
-I am using the Minecraft Forge API.
-Forge is built on top of the Mod Coder Pack (MCP).
-MCP is a tool for decompiling Minecraft.
-A copy of the game is obtained by using the official installer from Mojang.
-Forge uses Gradle.
-During development, Java loads my classpath directly.
-In release mode, my class files would have to be compressed into an archive first.
-The path to my DLLs is passed to the virtual machine.
+\subsection{Results}
+
+
 
 \section{Preprocessing Vertex Buffers}
 
 \subsection{Obtaining the buffers}
-In order to get the raw vertex buffers from Java to C++, I had to change x Minecraft classes:
-\begin{itemize}
-  \item 
-\end{itemize}
+In order to get the raw vertex buffers from Java to C++, I had to change three Minecraft classes.
+My approach was to replace the built-in \texttt{VertexBuffer} class with my own class, called \texttt{CppVertexBuffer}.
+Confusingly, the decompiled version of Minecraft has two classes called VertexBuffer in two separate packages.
+
+
+\begin{description}
+  \item[RenderChunk]
+    The class that represents a 16x16x16 chunk of blocks.
+    It contains one OpenGL vertex buffer per render layer.
+  \item[ChunkRenderDispatcher]
+  \item[VertexBufferUploader]
+\end{description}
 
 \subsection{Acceleration structure}
 
@@ -351,8 +389,9 @@ Non-playable characters ("NPCs") are not ray traced.
     A top-down view of the vertex buffer array, assuming a render distance of 12.
     The player's view cone is shown facing north.
     Each cell contains 16 RenderChunks.
-    When the player crosses a horizontal chunk boundary, every buffer in the grid is move once space.
+    When the player crosses a horizontal chunk boundary, every buffer in the grid is moved once space.
   }
+  \label{fig:grid}
 \end{figure}
 
 \begin{figure}
