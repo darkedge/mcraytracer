@@ -89,7 +89,7 @@
 %\listoffigures
 \newpage
 
-\section{Minecraft}
+\section{Introduction}
 Minecraft is a 2011 first-person sandbox video game.
 Originally created by Markus "Notch" Persson, it is currently maintained by Mojang.
 
@@ -108,6 +108,8 @@ mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
   \label{fig:ss-worldgen}
 \end{figure}
 
+\section{Related Work}
+
 \section{Minecraft Renderer}
 Minecraft uses multi-threaded chunk generation.
 Minecraft uses OpenGL.
@@ -121,7 +123,57 @@ Minecraft has two options for rendering static geometry:
     This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
 \end{description}
 My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
+
 \subsection{RenderChunks}
+See figure \ref{fig:renderchunk}.
+
+\begin{figure}
+  \centering
+  \begin{tikzpicture}[scale=0.3]
+  \foreach \x in{0,...,16} {
+    \draw[very thin] (0,\x ,16) -- (16,\x ,16);
+    \draw[very thin] (\x ,0,16) -- (\x ,16,16);
+    \draw[very thin] (16,\x ,16) -- (16,\x ,0);
+    \draw[very thin] (\x ,16,16) -- (\x ,16,0);
+    \draw[very thin] (16,0,\x ) -- (16,16,\x );
+    \draw[very thin] (0,16,\x ) -- (16,16,\x );
+  }
+  % right
+  \draw[dashed] (16,0,0) -- ++(5,0,0);
+  \draw[dashed] (16,16,0) -- ++(5,0,0);
+  \draw[dashed] (16,16,16) -- ++(5,0,0);
+  \draw[dashed] (16,0,16) -- ++(5,0,0);
+  % top
+  \draw[dashed] (0,16,0) -- ++(0,5,0);
+  \draw[dashed] (16,16,0) -- ++(0,5,0);
+  \draw[dashed] (16,16,16) -- ++(0,5,0);
+  \draw[dashed] (0,16,16) -- ++(0,5,0);
+  % back
+  \draw[dashed] (0,16,0) -- ++(0,0,-5);
+  \draw[dashed] (16,16,0) -- ++(0,0,-5);
+  \draw[dashed] (16,0,0) -- ++(0,0,-5);
+  % front
+  \draw[dashed] (0,16,16) -- ++(0,0,5);
+  \draw[dashed] (16,16,16) -- ++(0,0,5);
+  \draw[dashed] (16,0,16) -- ++(0,0,5);
+  \draw[dashed] (0,0,16) -- ++(0,0,5);
+  % left
+  \draw[dashed] (0,0,16) -- ++(-5,0,0);
+  \draw[dashed] (0,16,16) -- ++(-5,0,0);
+  \draw[dashed] (0,16,0) -- ++(-5,0,0);
+  % bottom
+  \draw[dashed] (16,0,0) -- ++(0,-5,0);
+  \draw[dashed] (16,0,16) -- ++(0,-5,0);
+  \draw[dashed] (0,0,16) -- ++(0,-5,0);
+  % curly braces
+  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0,0,16) -- node[left=15pt]{16} (0,16,16);
+  \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (0,0,16) -- node[below=15pt]{16} (16,0,16);
+  \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (16,0,16) -- node[below=15pt,right=10pt]{16} (16,0,0);
+  \end{tikzpicture}
+  \caption[Diagram of a RenderChunk]{A single, completely filled RenderChunk.}
+  \label{fig:renderchunk}
+\end{figure}
+
 There are four geometry groups, based on texture properties.
 \begin{description}
   \item[Solid] Uses textures that are fully opaque. Most world blocks are in this group.
@@ -130,10 +182,24 @@ There are four geometry groups, based on texture properties.
   \item[Translucent] Used for block which have partial transparency (alpha blending).
 \end{description}
 
+Vertex format:
+
+\begin{tabular}{|l|r|r|r|} \hline
+  Attribute & Type & \# & Bytes\\ \hline
+  Position & float & 3 & 12 \\ \hline
+  Color & byte & 4 & 4 \\ \hline
+  Lightmap & float & 2 & 8 \\ \hline
+  Texture & short & 2 & 4 \\ \hline
+  Total &   &  & 28 \\ \hline
+\end{tabular}
+
+\subsection{Other rendering}
+\texttt{TileEntitySpecialRenderer} etc.
+
 \begin{figure}
   \includegraphics[width=\textwidth]{ss-layers.png}
   \centering
-  \caption{From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
+  \caption{One object from each render layer. From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
   \label{fig:ss-layers}
 \end{figure}
 Every geometry group has its own vertex buffer.
@@ -180,6 +246,25 @@ For most mods, the first approach is sufficient.
 This also enables the developer to freely distribute their mod.
 Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
 
+\section{Hardware}
+This project is developed on the following machines:
+
+\begin{center}
+  \begin{tabular}{| l || c | c |} \hline
+    & Dell XPS 15 L502X & Desktop \\ \hline
+    Operating System & \multicolumn{2}{c|}{Microsoft Windows 10 Pro 64-bit} \\ \hline
+    Processor & Intel Core i7-2630QM & Intel Core i7-4790 \\ \hline
+    Memory & 4 GB DDR3 & 8 GB DDR3 \\ \hline \hline
+    GPU & NVIDIA GeForce GT 540M & NVIDIA GeForce GTX 970\\ \hline
+    - CUDA Cores & 96 & 1664 \\ \hline
+    - Shader Multiprocessors & 2 & 13 \\ \hline
+    - Compute Capability & 2.1 & 5.2 \\ \hline
+    %- Processor Clock & 1344 MHz &  \\ \hline
+    - Memory Clock & 900 MHz & 7010 MHz \\ \hline
+    - Graphics Clock & 672 MHz & 1140 MHz \\ \hline
+    - Memory & 2 GB & 4 GB\footnote{\url{https://blogs.nvidia.com/blog/2015/02/24/gtx-970/}}\\ \hline
+  \end{tabular}
+\end{center}
 
 \section{C++ and CUDA}
 I wanted to create a GPU ray tracer.
@@ -262,39 +347,14 @@ However, Visual Studio can easily block hundreds of these signals.
 Visual Studio 2017 offers an option to ignore certain exceptions per module, allowing me to break on access violations in my own native code while ignoring those coming from the JVM.
 
 \subsection{Kernel overhead on Windows}
-
-\section{Hardware}
-This project is developed on the following machines:
-
-\begin{center}
-  \begin{tabular}{| l || c | c |} \hline
-    & Dell XPS 15 L502X & Desktop \\ \hline
-    Operating System & \multicolumn{2}{c|}{Microsoft Windows 10 Pro 64-bit} \\ \hline
-    Processor & Intel Core i7-2630QM & Intel Core i7-4790 \\ \hline
-    Memory & 4 GB DDR3 & 8 GB DDR3 \\ \hline \hline
-    GPU & NVIDIA GeForce GT 540M & NVIDIA GeForce GTX 970\\ \hline
-    - CUDA Cores & 96 & 1664 \\ \hline
-    - Shader Multiprocessors & 2 & 13 \\ \hline
-    - Compute Capability & 2.1 & 5.2 \\ \hline
-    %- Processor Clock & 1344 MHz &  \\ \hline
-    - Memory Clock & 900 MHz & 7010 MHz \\ \hline
-    - Graphics Clock & 672 MHz & 1140 MHz \\ \hline
-    - Memory & 2 GB & 4 GB\footnote{\url{https://blogs.nvidia.com/blog/2015/02/24/gtx-970/}}\\ \hline
-  \end{tabular}
-\end{center}
-
-\begin{equation}
-  f(s, ds) =
-  \begin{cases}
-    \frac{\lceil s \rceil - s}{\lvert ds \rvert} & ds > 0 \\
-    \frac{s - \lfloor s \rfloor}{\lvert ds \rvert} & ds < 0 \\
-    \infty & ds = 0
-  \end{cases}
-\end{equation}
+There is a non-trivial amount of overhead attached to the launch of a CUDA kernel on Windows.
+This is due to the Windows Display Driver Model ("WDDM").
+An alternative would be to use the Tesla Compute Cluster driver ("TCC").
+Unfortunately, TCC is not available for GeForce GPUs.
+Additionally, GPUs in TCC cannot be connected to a display.
 
 \section{Ray Tracing OpenGL Vertex Buffers}
 My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
-
 
 \subsection{Forge Events}
 I wanted to see if I could make my mod work using the first approach.
@@ -338,11 +398,29 @@ The \texttt{Raytracer} class listens to the following events:
 
 \subsection{Using Java ASM}
 
-\subsection{C++/CUDA}
+\subsection{C++}
 \texttt{cudaGraphicsGLRegisterBuffer}
 
-\subsection{Results}
+% TODO talk about vertex buffer grid
 
+\subsection{CUDA}
+First, we calculate the player's position relative to the chunk it is currently in.
+
+
+
+See equation \ref{eq:findfirstt}.
+
+\begin{equation}
+f(s, ds) =
+\begin{cases}
+\frac{\lceil s \rceil - s}{\lvert ds \rvert} & ds > 0 \\
+\frac{s - \lfloor s \rfloor}{\lvert ds \rvert} & ds < 0 \\
+\infty & ds = 0
+\end{cases}
+\label{eq:findfirstt}
+\end{equation}
+
+\subsection{Results}
 
 
 \section{Preprocessing Vertex Buffers}
@@ -361,7 +439,13 @@ Confusingly, the decompiled version of Minecraft has two classes called VertexBu
   \item[VertexBufferUploader]
 \end{description}
 
-\subsection{Acceleration structure}
+\subsection{C++}
+
+\subsection{CUDA}
+
+\subsection{Results}
+
+\section{Conclusion}
 
 \section{Future work}
 I only got to work on the world rendering of the game.
@@ -457,53 +541,6 @@ Non-playable characters ("NPCs") are not ray traced.
   \label{fig:grid}
 \end{figure}
 
-\begin{figure}
-  \centering
-  \begin{tikzpicture}[scale=0.3]
-  \foreach \x in{0,...,16} {
-    \draw[very thin] (0,\x ,16) -- (16,\x ,16);
-    \draw[very thin] (\x ,0,16) -- (\x ,16,16);
-    \draw[very thin] (16,\x ,16) -- (16,\x ,0);
-    \draw[very thin] (\x ,16,16) -- (\x ,16,0);
-    \draw[very thin] (16,0,\x ) -- (16,16,\x );
-    \draw[very thin] (0,16,\x ) -- (16,16,\x );
-  }
-  % right
-  \draw[dashed] (16,0,0) -- ++(5,0,0);
-  \draw[dashed] (16,16,0) -- ++(5,0,0);
-  \draw[dashed] (16,16,16) -- ++(5,0,0);
-  \draw[dashed] (16,0,16) -- ++(5,0,0);
-  % top
-  \draw[dashed] (0,16,0) -- ++(0,5,0);
-  \draw[dashed] (16,16,0) -- ++(0,5,0);
-  \draw[dashed] (16,16,16) -- ++(0,5,0);
-  \draw[dashed] (0,16,16) -- ++(0,5,0);
-  % back
-  \draw[dashed] (0,16,0) -- ++(0,0,-5);
-  \draw[dashed] (16,16,0) -- ++(0,0,-5);
-  \draw[dashed] (16,0,0) -- ++(0,0,-5);
-  % front
-  \draw[dashed] (0,16,16) -- ++(0,0,5);
-  \draw[dashed] (16,16,16) -- ++(0,0,5);
-  \draw[dashed] (16,0,16) -- ++(0,0,5);
-  \draw[dashed] (0,0,16) -- ++(0,0,5);
-  % left
-  \draw[dashed] (0,0,16) -- ++(-5,0,0);
-  \draw[dashed] (0,16,16) -- ++(-5,0,0);
-  \draw[dashed] (0,16,0) -- ++(-5,0,0);
-  % bottom
-  \draw[dashed] (16,0,0) -- ++(0,-5,0);
-  \draw[dashed] (16,0,16) -- ++(0,-5,0);
-  \draw[dashed] (0,0,16) -- ++(0,-5,0);
-  % curly braces
-  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0,0,16) -- node[left=15pt]{16} (0,16,16);
-  \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (0,0,16) -- node[below=15pt]{16} (16,0,16);
-  \draw[decoration={brace,mirror,amplitude=10pt,raise=5pt},decorate] (16,0,16) -- node[below=15pt,right=10pt]{16} (16,0,0);
-  \end{tikzpicture}
-  \caption[Diagram of a RenderChunk]{A single, completely filled RenderChunk.}
-\end{figure}
-
-% TODO Rotate this diagram 90 degrees along Y axis
 \begin{figure}
   \centering
   \begin{tikzpicture}[scale=0.5]
