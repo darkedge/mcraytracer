@@ -20,10 +20,12 @@
 %\endgroup}
 
 \usepackage{tikz,tkz-euclide}
+\usepackage{tikz-qtree}
 % tikz features
 \usetikzlibrary{decorations.pathreplacing,angles,quotes,shapes,arrows,fit}
 \usetikzlibrary{calc} % coordinates
 \usetikzlibrary{arrows.meta} % better arrows
+\usetikzlibrary{trees} % this is to allow the fork right path
 \usetkzobj{all}
 
 % real numbers symbol
@@ -37,9 +39,10 @@
 
 % extra math
 \usepackage{mathtools}
-
 % icons!
 \usepackage{fontawesome}
+% quotations
+\usepackage{csquotes}
 
 % bigger dot for multiplication
 \makeatletter
@@ -91,7 +94,7 @@
 
 \section{Introduction}
 Minecraft is a 2011 first-person sandbox video game.
-Originally created by Markus "Notch" Persson, it is currently maintained by Mojang.
+Originally created by Markus \enquote{Notch} Persson, it is currently maintained by Mojang.
 
 
 Minecraft comes in multiple editions, for various platforms. This paper focuses on the PC version of Minecraft, released for Windows, macOS, and Linux.
@@ -119,7 +122,7 @@ Minecraft has two options for rendering static geometry:
     Display Lists are a group of OpenGL commands that have been compiled and sent to the GPU.
     An object can then be drawn by calling the list.
     The list can be reused, which means you do not have to send the data over again.
-  \item[Vertex Buffer Objects] Vertex Buffer Objects ("VBOs") were available in OpenGL 1.4 through an extension, and were later added to the core specification in version 2.1.
+  \item[Vertex Buffer Objects] Vertex Buffer Objects (\enquote{VBOs}) were available in OpenGL 1.4 through an extension, and were later added to the core specification in version 2.1.
     This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
 \end{description}
 My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
@@ -205,9 +208,9 @@ Vertex format:
 Every geometry group has its own vertex buffer.
 
 \section{Minecraft Forge}
-Minecraft Forge ("Forge") is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
+Minecraft Forge (\enquote{Forge}) is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
 \subsection{Setting up a mod development environment}
-The Mod Development Kit ("MDK") can be downloaded from the Forge website\footnote{\url{http://files.minecraftforge.net/}}.
+The Mod Development Kit (\enquote{MDK}) can be downloaded from the Forge website\footnote{\url{http://files.minecraftforge.net/}}.
 The MDK distribution includes ForgeGradle\footnote{\url{https://github.com/MinecraftForge/ForgeGradle}}.
 ForgeGradle is a plugin for the Gradle\footnote{\url{https://gradle.org/}} build system.
 The Minecraft binaries are downloaded, and subsequently decompiled, deobfuscated, 
@@ -222,7 +225,7 @@ The Gradle tasks include:
   \item Generate the Forge Minecraft binary
 \end{enumerate}
 
-Forge explicitly supports the Eclipse and IntelliJ integrated development environments ("IDEs").
+Forge explicitly supports the Eclipse and IntelliJ integrated development environments (\enquote{IDEs}).
 I used IntelliJ IDEA Community.
 ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
 
@@ -275,7 +278,59 @@ However, I have no experience with OpenGL compute shaders, whereas I do have exp
 
 There exist Java bindings for CUDA, but using C++ removes my dependency on a binding layer.
 \subsection{Java Native Interface}
-Java Native Interface ("JNI") is a programming framework that allows for Java code to interact with native code.
+Java Native Interface (\enquote{JNI}) is a programming framework that allows for Java code to interact with native code.
+\subsubsection{javah}
+\texttt{javah} is a tool that generates C header and source files for Java classes that declare native methods.
+I use the generated header file in my Visual Studio project.
+The header file is compatible with C++ code bases as it includes an \texttt{\#ifdef \_\_cplusplus} directive which prepends an \texttt{extern \char`\"C"} to the function declarations.
+Function parameters are passed as the following\footnote{\url{https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/types.html}}:
+
+\begin{center}
+\begin{tabular}{|l|l|l|} \hline
+  Java & C++ & represented type \\ \hline
+  boolean & jboolean & unsigned 8 bits \\ 
+  byte & jbyte & signed 8 bits \\ 
+  char & jchar & unsigned 16 bits \\ 
+  short & jshort & signed 16 bits \\ 
+  int & jint & signed 32 bits \\ 
+  long & jlong & signed 64 bits \\ 
+  float & jfloat & 32 bits \\ 
+  double & jdouble & 64 bits \\ 
+  void & void & not applicable \\ \hline
+\end{tabular}
+\end{center}
+
+Additionally, Java objects are passed as (subclasses of) \texttt{jobject} instances, as can be seen in Figure \ref{fig:jobject}.
+
+\begin{figure}
+  \begin{center}
+    \begin{tikzpicture}[level distance=1.25in,,scale=.75]
+    \tikzset{edge from parent/.style= 
+      {thick, draw,
+        edge from parent fork right},every tree node/.style={draw,minimum width=1in,text width=1in, align=center},grow'=right}
+    \Tree 
+    [.\texttt{jobject}
+    [.\texttt{jclass} ]
+    [.\texttt{jstring} ]
+    [.\texttt{jthrowable} ]
+    [.\texttt{jarray}
+    [.\texttt{jobjectArray} ]
+    [.\texttt{jbooleanArray} ]
+    [.\texttt{jbyteArray} ]
+    [.\texttt{jcharArray} ]
+    [.\texttt{jshortArray} ]
+    [.\texttt{jintArray} ]
+    [.\texttt{jlongArray} ]
+    [.\texttt{jfloatArray} ]
+    [.\texttt{jdoubleArray} ]
+    ]
+    ]
+    \end{tikzpicture}
+  \end{center}
+\caption{C++ inheritance diagram}
+\label{fig:jobject}
+\end{figure}
+
 \subsection{CUDA}
 CUDA is a parallel computing platform and programming model developed by NVIDIA.
 It is only compatible with NVIDIA hardware.
@@ -348,8 +403,8 @@ Visual Studio 2017 offers an option to ignore certain exceptions per module, all
 
 \subsection{Kernel overhead on Windows}
 There is a non-trivial amount of overhead attached to the launch of a CUDA kernel on Windows.
-This is due to the Windows Display Driver Model ("WDDM").
-An alternative would be to use the Tesla Compute Cluster driver ("TCC").
+This is due to the Windows Display Driver Model (\enquote{WDDM}).
+An alternative would be to use the Tesla Compute Cluster driver (\enquote{TCC}).
 Unfortunately, TCC is not available for GeForce GPUs.
 Additionally, GPUs in TCC cannot be connected to a display.
 
@@ -395,27 +450,56 @@ The \texttt{Raytracer} class listens to the following events:
   %\item \texttt{GuiOpenEvent} \\
     %Fired when the top-level menu changes.
 \end{itemize}
+I was able to draw a full-screen texture using CUDA and copy it to Minecraft using OpenGL.
+However, I am not able to obtain the Minecraft vertex buffers using Forge Events alone.
+That is where I either needed to change the Minecraft source directly, or use Java ASM.
+I chose the second option.
 
 \subsection{Using Java ASM}
+We start off by creating a class that implements the \texttt{IFMLLoadingPlugin} interface.
+This interface has five methods, but we only need to implement the \texttt{getASMTransformerClass} method.
+This method returns an array of classes that implement the \texttt{IClassTransformer} interface.
+We create a class that implements this interface and put that in the array.
+
+The \texttt{IClassTransformer} interface only has one method: \texttt{transform}.
+This function takes three parameters:
+\begin{itemize}
+  \item The name of the class to be transformed
+  \item The deobfuscated name of the class. Unused during development.
+  \item The bytecode of the class
+\end{itemize}
+
+\begin{itemize}
+  \item \texttt{EntityRenderer} \\
+%  \item \texttt{GuiVideoSettings} \\
+  \item \texttt{RenderGlobal} \\
+\end{itemize}
+
 
 \subsection{C++}
+
 \texttt{cudaGraphicsGLRegisterBuffer}
 
 % TODO talk about vertex buffer grid
 
 \subsection{CUDA}
-First, we calculate the player's position relative to the chunk it is currently in.
+First, we calculate the player's position relative to the chunk it is currently in:
+\begin{equation}
+  f(x) = \frac{x}{16} - \left\lfloor\frac{x}{16}\right\rfloor
+\end{equation}
+This maps the player's position to $[0, 1)$.
+
 
 
 
 See equation \ref{eq:findfirstt}.
 
 \begin{equation}
-f(s, ds) =
+f(x, dx) =
 \begin{cases}
-\frac{\lceil s \rceil - s}{\lvert ds \rvert} & ds > 0 \\
-\frac{s - \lfloor s \rfloor}{\lvert ds \rvert} & ds < 0 \\
-\infty & ds = 0
+\frac{\lceil x \rceil - x}{\lvert dx \rvert} & dx > 0 \\
+\frac{x - \lfloor x \rfloor}{\lvert dx \rvert} & dx < 0 \\
+\infty & dx = 0
 \end{cases}
 \label{eq:findfirstt}
 \end{equation}
@@ -450,7 +534,7 @@ Confusingly, the decompiled version of Minecraft has two classes called VertexBu
 \section{Future work}
 I only got to work on the world rendering of the game.
 Viewmodels (player-held items) are not ray traced.
-Non-playable characters ("NPCs") are not ray traced.
+Non-playable characters (\enquote{NPCs}) are not ray traced.
 
 \bibliography{minecraft_ray_traced}{}
 \bibliographystyle{plain}
@@ -576,7 +660,7 @@ Non-playable characters ("NPCs") are not ray traced.
   \theta& = \frac{vertical\ field\ of\ view}{2} \nonumber \\
   \vec{u}& = \overrightarrow{PQ}\times\overrightarrow{PR} \nonumber \\
   S& = \frac{Q + R}{2} \nonumber \\
-  \text{\faVideoCamera}_{pos}& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \label{eq:1}
+  \text{\faVideoCamera}_{pos}& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \label{eq:rayorigin}
   \end{align}
   \caption{Ray origin calculations}
 \end{figure}
