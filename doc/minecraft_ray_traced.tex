@@ -31,6 +31,14 @@
 % real numbers symbol
 \usepackage{amssymb}
 
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+}
+
 % set default arrow
 \tikzset{>=Latex}
 
@@ -455,25 +463,72 @@ However, I am not able to obtain the Minecraft vertex buffers using Forge Events
 That is where I either needed to change the Minecraft source directly, or use Java ASM.
 I chose the second option.
 
-\subsection{Using Java ASM}
-We start off by creating a class that implements the \texttt{IFMLLoadingPlugin} interface.
-This interface has five methods, but we only need to implement the \texttt{getASMTransformerClass} method.
-This method returns an array of classes that implement the \texttt{IClassTransformer} interface.
-We create a class that implements this interface and put that in the array.
+% TODO: Did I already define what ASM is somewhere?
+% TODO: This part assumes deobfuscated source code; make sure that's mentioned
+\subsection{Using ASM}
+Forge provides the \texttt{IFMLLoadingPlugin} interface for mods which have customized loading procedures.
+It provides a method for adding class transformers, which can edit the Minecraft bytecode before it is loaded into the game.
+An example of bytecode can be found in Figure \ref{fig:bytecode}.
+We create a class transformer by implementing Forge's \texttt{IClassTransformer} interface, which contains a single method: \texttt{transform}.
+Every time a Minecraft class is initialized, the method is called with its name and bytecode.
+This is the general procedure if we want to change a method:
 
-The \texttt{IClassTransformer} interface only has one method: \texttt{transform}.
-This function takes three parameters:
-\begin{itemize}
-  \item The name of the class to be transformed
-  \item The deobfuscated name of the class. Unused during development.
-  \item The bytecode of the class
-\end{itemize}
+\begin{enumerate}
+  \item Check the name of the class
+  \item Parse the bytecode of the class to a \texttt{ClassNode}
+  \item Find the method in the \texttt{MethodNode} list of the \texttt{ClassNode}
+  \item Find the instruction in the \texttt{InsnList} list of the \texttt{MethodNode}
+  \item Insert new instructions
+  \item Remove old instructions
+  \item Return the modified class as a byte array
+\end{enumerate}
+
+We changed the following classes:
 
 \begin{itemize}
   \item \texttt{EntityRenderer} \\
-%  \item \texttt{GuiVideoSettings} \\
+    Contains the method \texttt{updateCameraAndRender} that calls \texttt{renderWorld} to render the world.
+    We replace it with a call to a \texttt{Raytracer} method.
+    An easy way to do this is by having a Singleton.
+    This removes the need to introduce a new field in the modified class.
+    It involves adding two instructions:
+    \begin{itemize}
+      \item \texttt{INVOKESTATIC} to put the Singleton on the stack
+      \item \texttt{INVOKEVIRTUAL} to call the static function
+    \end{itemize}
   \item \texttt{RenderGlobal} \\
+    Contains a \texttt{ChunkRenderContainer} field that is initialized using a \texttt{VboRenderList}.
+    It is a list of RenderChunks which is rebuilt every frame.
+    We replace the construction of the \texttt{ChunkRenderContainer} by modifying the \texttt{NEW} and \texttt{INVOKESPECIAL} instructions to use our \texttt{RaytracerRenderList} instead.
+    The rest is handled automatically through inheritance.
+    
 \end{itemize}
+
+\begin{figure}
+\begin{lstlisting}[breaklines]
+// Java
+public Renderer(Raytracer raytracer) {
+    this.raytracer = raytracer;
+    this.mc = Minecraft.getMinecraft();
+}
+
+// Bytecode
+public <init>(Lcom/marcojonkers/mcraytracer/Raytracer;)V
+ALOAD 0
+INVOKESPECIAL java/lang/Object.<init> ()V
+ALOAD 0
+ALOAD 1
+PUTFIELD com/marcojonkers/mcraytracer/Renderer.raytracer : Lcom/marcojonkers/mcraytracer/Raytracer;
+ALOAD 0
+INVOKESTATIC net/minecraft/client/Minecraft.getMinecraft ()Lnet/minecraft/client/Minecraft;
+PUTFIELD com/marcojonkers/mcraytracer/Renderer.mc : Lnet/minecraft/client/Minecraft;
+RETURN
+LOCALVARIABLE this Lcom/marcojonkers/mcraytracer/Renderer; 0
+LOCALVARIABLE raytracer Lcom/marcojonkers/mcraytracer/Raytracer; 1
+\end{lstlisting}
+\caption{Example bytecode for the constructor of my \texttt{Renderer} class. Note the use of Java VM signatures. \texttt{ALOAD} puts a \texttt{LOCALVARIABLE} (listed at the bottom) on the stack. Method parameters and \texttt{this} are implicit local variables.}
+\label{fig:bytecode}
+\end{figure}
 
 
 \subsection{C++}
