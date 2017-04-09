@@ -215,6 +215,7 @@ Vertex format:
 \end{figure}
 Every geometry group has its own vertex buffer.
 
+% TODO: Big disclaimer that source code names all come from MCP, not Mojang
 \section{Minecraft Forge}
 Minecraft Forge (\enquote{Forge}) is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
 \subsection{Setting up a mod development environment}
@@ -501,8 +502,12 @@ We changed the following classes:
     It is a list of RenderChunks which is rebuilt every frame.
     We replace the construction of the \texttt{ChunkRenderContainer} by modifying the \texttt{NEW} and \texttt{INVOKESPECIAL} instructions to use our \texttt{RaytracerRenderList} instead.
     The rest is handled automatically through inheritance.
-    
 \end{itemize}
+
+% TODO: the basic concepts of render layers should be known at this point
+\texttt{RaytracerRenderList} overrides \texttt{ChunkRenderContainer} such that the list of vertex buffers is sent to C++ instead of being drawn using OpenGL.
+The \texttt{glBufferId} 
+
 
 \begin{figure}
 \begin{lstlisting}[breaklines]
