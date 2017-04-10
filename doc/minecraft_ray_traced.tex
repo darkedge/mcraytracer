@@ -425,8 +425,8 @@ Additionally, GPUs in TCC cannot be connected to a display.
 My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
 
 \subsection{Forge Events}
-I wanted to see if I could make my mod work using the first approach.
-Forge adds hooks to the game loop which I could use to intercept the rendering code.
+%I wanted to see if I could make my mod work using the first approach.
+%Forge adds hooks to the game loop which I could use to intercept the rendering code.
 The \texttt{Raytracer} class listens to the following events:
 \begin{itemize}
   \item \texttt{FMLInitializationEvent} \\
@@ -488,6 +488,8 @@ This is the general procedure if we want to change a method:
   \item Return the modified class as a byte array
 \end{enumerate}
 
+% TODO: Finish this sentence
+%To minimize the amount of ASM changes, it is recommended to 
 We changed the following classes:
 
 \begin{itemize}
@@ -632,7 +634,7 @@ With this information, we can calculate the ray origin and view pyramid, as show
   \tkzMarkSegment[pos=.25,mark=|](A,C)
   
   % eye point stuff
-  \draw[dotted] (E) node[anchor=north west]{$S$} -- (F) node[anchor=north]{\faVideoCamera};
+  \draw[dotted] (E) node[anchor=north west]{$S$} -- (F) node[anchor=east]{\faVideoCamera};
   \draw[arw] (A) -- node[anchor=north west]{$\vec{u}$} (I);
   \draw[dotted] (H) -- (F);
   \draw[dotted] (G) -- (E);
@@ -643,7 +645,7 @@ With this information, we can calculate the ray origin and view pyramid, as show
   \theta& = \frac{vertical\ field\ of\ view}{2} \nonumber \\
   \vec{u}& = \overrightarrow{PQ}\times\overrightarrow{PR} \nonumber \\
   S& = \frac{Q + R}{2} \nonumber \\
-  \text{\faVideoCamera}_{pos}& = S + \frac{\vec{u}}{\lvert\lvert\vec{u}\rvert\rvert}\bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \nonumber
+  \text{\faVideoCamera}_{pos}& = S + Normalize(\vec{u}) \bigcdot\frac{\lvert\lvert\overrightarrow{PR}\rvert\rvert}{2 \tan\left(\theta\right)} \nonumber
   \end{align}
   \caption{Ray origin calculations}
   \label{fig:rayorigin}
@@ -655,16 +657,16 @@ Empty buffers are discarded.
 We register the buffer in CUDA to obtain a \texttt{cudaGraphicsResource}.
 Each buffer must be registered exactly once.
 We store the \texttt{cudaGraphicsResource} handles in a three-dimensional array (see Figure \ref{fig:grid}).
+The size of the array is defined by the render distance option in the game settings.
+The render distance is defined in chunks (minimum = 2, maximum = 16 on 32-bit Java, 32 on 64-bit Java).
+
 The grid is indexed $x,z,y$.
 The handles are placed in the grid such that the player chunk is in the center of the $x$\nobreakdash--$z$~plane:
 \begin{align}
-  x_{grid} &= \left\lfloor\frac{x_{player}}{16}\right\rfloor - \frac{x_{chunk}}{16} + c \nonumber \\
+  x_{grid} &= \left\lfloor\frac{x_{player}}{16}\right\rfloor - \frac{x_{chunk}}{16} + \texttt{MAX\_RENDER\_DISTANCE} \nonumber \\
   y_{grid} &= \left\lfloor\frac{y_{player}}{16}\right\rfloor \nonumber \\
-  z_{grid} &= \left\lfloor\frac{z_{player}}{16}\right\rfloor - \frac{z_{chunk}}{16} + c \nonumber
+  z_{grid} &= \left\lfloor\frac{z_{player}}{16}\right\rfloor - \frac{z_{chunk}}{16} + \texttt{MAX\_RENDER\_DISTANCE} \nonumber
 \end{align}
-\begin{center}
-  The game's render distance in chunks is stored in $c$.
-\end{center}
 
 When the player moves to a new chunk, we shift the grid along the $x$\nobreakdash--$z$~plane.
 This allows us to keep the vertical \texttt{RenderChunk}s contiguous in memory.
@@ -717,7 +719,7 @@ The implicit CUDA variables \texttt{blockIdx} and \texttt{threadIdx} are used in
 We calculate the ray direction for every pixel by linearly interpolating the corners of the viewport (refer to Figure \ref{fig:rayorigin}):
 
 \begin{equation}
-  Lerp(\vec{a}, \vec{b}, t) = \vec{a} + t \bigcdot (\vec{b}-\vec{a})
+  Lerp(a, b, t) = a + t \bigcdot (b-a)
 \end{equation}
 
 \begin{equation}
@@ -745,26 +747,40 @@ f(x, dx) =
 We traverse the grid until we hit a non-empty cell.
 The device pointer and array size from that cell are read from device memory.
 We perform two triangle intersection tests per quad, using the technique from \cite{moller2005fast}.
-If we hit the back-face of the first triangle, we can skip the test for the other triangle because they share the same normal.
+If we hit the back-face of the first triangle, we can skip the test for the second triangle because they share the same normal.
+We can also skip the second triangle if our first hit was successful.
 
 \subsection{Results}
+We initially only tested for hit vs non-hit.
+No texturing or lighting techniques were applied.
 Results were disappointing.
+The NVIDIA NSight profiler showed that the kernel is mostly dependent on memory reads.
 
 \section{Preprocessing Vertex Buffers}
 
 \subsection{Obtaining the buffers}
-In order to get the raw vertex buffers from Java to C++, I had to change three Minecraft classes.
-My approach was to replace the built-in \texttt{VertexBuffer} class with my own class, called \texttt{CppVertexBuffer}.
-Confusingly, the decompiled version of Minecraft has two classes called VertexBuffer in two separate packages.
+In order to get the raw vertex buffers from Java to C++, we change three more classes.
+%My approach was to replace the built-in \texttt{VertexBuffer} class with my own class, called \texttt{CppVertexBuffer}.
+%Confusingly, the decompiled version of Minecraft has two classes called VertexBuffer in two separate packages.
 
+We created our own version of \texttt{VertexBuffer}.
+\texttt{VertexBuffer} contains a method called \texttt{bufferData} which uploads a \texttt{ByteBuffer} to OpenGL.
+We modify the \texttt{bufferData} function such that 
+We need extra information from \texttt{ChunkRenderDispatcher}.
 
-\begin{description}
-  \item[RenderChunk]
-    The class that represents a 16x16x16 chunk of blocks.
-    It contains one OpenGL vertex buffer per render layer.
-  \item[ChunkRenderDispatcher]
-  \item[VertexBufferUploader]
-\end{description}
+\begin{itemize}
+  \item \texttt{RenderChunk} \\
+    %The class that represents a 16x16x16 chunk of blocks.
+    %It contains one OpenGL vertex buffer per render layer.
+    We replace the \texttt{VertexBuffer} field with our \texttt{CppVertexBuffer}.
+    There is no inheritance, so we replace all references to \texttt{VertexBuffer}.
+  \item \texttt{ChunkRenderDispatcher} \\
+    In charge of uploading \texttt{RenderChunk}s to OpenGL.
+  \item \texttt{VertexBufferUploader} \\
+  Passes calls from \texttt{ChunkRenderDispatcher} to \texttt{RenderChunk}.
+  We change this class to support \texttt{CppVertexBuffer}.
+  
+\end{itemize}
 
 \subsection{C++}
 
@@ -782,10 +798,6 @@ Non-playable characters (\enquote{NPCs}) are not ray traced.
 \bibliography{minecraft_ray_traced}{}
 %\bibliographystyle{plain}
 \bibliographystyle{apalike}
-
-% hfov = 102.4478577779882556443232935315
-% ++(141.22392888899412782216164676575:6cm);
-% ++(38.77607111100587217783835323425:6cm);
 
 % TODO: Java class diagrams(minecraft, raytracer)
 
