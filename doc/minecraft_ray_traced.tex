@@ -274,7 +274,7 @@ This project is developed on the following machines:
     %- Processor Clock & 1344 MHz &  \\ \hline
     - Memory Clock & 900 MHz & 7010 MHz \\ \hline
     - Graphics Clock & 672 MHz & 1140 MHz \\ \hline
-    - Memory & 2 GB & 4 GB\footnote{\url{https://blogs.nvidia.com/blog/2015/02/24/gtx-970/}}\\ \hline
+    - Memory & 2 GB & 4 GB \\ \hline % \footnote{\url{https://blogs.nvidia.com/blog/2015/02/24/gtx-970/}}
   \end{tabular}
 \end{center}
 
@@ -292,7 +292,8 @@ Java Native Interface (\enquote{JNI}) is a programming framework that allows for
 \texttt{javah} is a tool that generates C header and source files for Java classes that declare native methods.
 I use the generated header file in my Visual Studio project.
 The header file is compatible with C++ code bases as it includes an \texttt{\#ifdef \_\_cplusplus} directive which prepends an \texttt{extern \char`\"C"} to the function declarations.
-Function parameters are passed as the following\footnote{\url{https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/types.html}}:
+\cite{noauthor_jni_nodate} Function parameters are passed as the following:
+% TODO: citation
 
 \begin{center}
 \begin{tabular}{|l|l|l|} \hline
@@ -501,13 +502,10 @@ We changed the following classes:
     Contains a \texttt{ChunkRenderContainer} field that is initialized using a \texttt{VboRenderList}.
     It is a list of RenderChunks which is rebuilt every frame.
     We replace the construction of the \texttt{ChunkRenderContainer} by modifying the \texttt{NEW} and \texttt{INVOKESPECIAL} instructions to use our \texttt{RaytracerRenderList} instead.
-    The rest is handled automatically through inheritance.
+    \texttt{RaytracerRenderList} overrides \texttt{ChunkRenderContainer} such that the list of \texttt{VertexBuffer}s is sent to C++ instead of being drawn using OpenGL.
 \end{itemize}
 
 % TODO: the basic concepts of render layers should be known at this point
-\texttt{RaytracerRenderList} overrides \texttt{ChunkRenderContainer} such that the list of vertex buffers is sent to C++ instead of being drawn using OpenGL.
-The \texttt{glBufferId} 
-
 
 \begin{figure}
 \begin{lstlisting}[breaklines]
@@ -537,10 +535,54 @@ LOCALVARIABLE raytracer Lcom/marcojonkers/mcraytracer/Raytracer; 1
 
 
 \subsection{C++}
+In C++, we use JNI calls to obtain the OpenGL buffer ID of the \texttt{VertexBuffer}, as the field is marked \texttt{private} in Java.
+In CUDA, we register the buffer using \texttt{cudaGraphicsGLRegisterBuffer} to obtain a \texttt{cudaGraphicsResource}.
+Each buffer must be registered exactly once.
+We store the \texttt{cudaGraphicsResource} handles in a three-dimensional array (see Figure \ref{fig:grid}).
+The grid is indexed $x,z,y$.
+The handles are placed in the grid such that the player chunk is in the center of the $x$\nobreakdash--$z$~plane (Figure \ref{eq:grid}).
+\begin{figure}
+\begin{align}
+  x_{grid} &= \left\lfloor\frac{x_{player}}{16}\right\rfloor - \frac{x_{chunk}}{16} + c \nonumber \\
+  y_{grid} &= \left\lfloor\frac{y_{player}}{16}\right\rfloor \nonumber \\
+  z_{grid} &= \left\lfloor\frac{z_{player}}{16}\right\rfloor - \frac{z_{chunk}}{16} + c
+\end{align}
+\caption{The game's render distance in chunks is stored in $c$.}
+\label{eq:grid}
+\end{figure}
+When the player moves to a new chunk, we shift the grid along the $x$\nobreakdash--$z$~plane.
+This allows us to keep the vertical \texttt{RenderChunk}s contiguous in memory.
 
-\texttt{cudaGraphicsGLRegisterBuffer}
-
-% TODO talk about vertex buffer grid
+\begin{figure}
+  \centering
+  \begin{tikzpicture}
+  \draw[step=0.5cm,very thin,opacity=0.2] (-6,-6) grid (6.5,6.5);
+  %\fill (0,0) -- (0.5,0) -- (0.5,0.5) -- (0,0.5) -- (0,0);
+  \draw[dashed] (-6,0) -- (6.5,0);
+  \draw[dashed] (-6,0.5) -- (6.5,0.5);
+  \draw[dashed] (0,-6) -- (0,6.5);
+  \draw[dashed] (0.5,-6) -- (0.5,6.5);
+  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0.5,0.5) -- node[above=15pt] {12} (6.5,0.5);
+  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0,0.5) -- node[left=15pt] {12} (0,6.5);
+  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,6.5) -- node[above=15pt] {35} (6.5,6.5);
+  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,-6) -- node[left=15pt] {35} (-6,6.5);
+  \draw[fill] (0.25,0.25) circle (.5ex);
+  
+  % view frustum
+  \draw (0.25,0.25) -- (-6,5.25);
+  \draw (0.25,0.25) -- (6.5,5.25);
+  \fill[color=gray,opacity=0.3] (-6,6.5) -- (-6,5.25) -- (0.25,0.25) -- (6.5,5.25) -- (6.5,6.5);
+  
+  %\draw[decoration={brace,mirror,raise=5pt},decorate] (0.5,0) -- node[below=6pt] {Render distance} (6.5,0);
+  \end{tikzpicture}
+  \caption[Top-down view of vertex buffer array]{
+    A top-down view of the vertex buffer array, assuming a render distance of 12.
+    The player's view cone is shown facing north.
+    Each cell contains 16 \texttt{RenderChunk}s.
+    When the player crosses a horizontal chunk boundary, every buffer in the grid is moved once space.
+  }
+  \label{fig:grid}
+\end{figure}
 
 \subsection{CUDA}
 First, we calculate the player's position relative to the chunk it is currently in:
@@ -597,8 +639,8 @@ Viewmodels (player-held items) are not ray traced.
 Non-playable characters (\enquote{NPCs}) are not ray traced.
 
 \bibliography{minecraft_ray_traced}{}
-\bibliographystyle{plain}
-%\bibliographystyle{apalike}
+%\bibliographystyle{plain}
+\bibliographystyle{apalike}
 
 % Code flow structure
 \begin{figure}
@@ -653,37 +695,6 @@ Non-playable characters (\enquote{NPCs}) are not ray traced.
 % hfov = 102.4478577779882556443232935315
 % ++(141.22392888899412782216164676575:6cm);
 % ++(38.77607111100587217783835323425:6cm);
-
-\begin{figure}
-  \centering
-  \begin{tikzpicture}
-  \draw[step=0.5cm,very thin,opacity=0.2] (-6,-6) grid (6.5,6.5);
-  %\fill (0,0) -- (0.5,0) -- (0.5,0.5) -- (0,0.5) -- (0,0);
-  \draw[dashed] (-6,0) -- (6.5,0);
-  \draw[dashed] (-6,0.5) -- (6.5,0.5);
-  \draw[dashed] (0,-6) -- (0,6.5);
-  \draw[dashed] (0.5,-6) -- (0.5,6.5);
-  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0.5,0.5) -- node[above=15pt] {12} (6.5,0.5);
-  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (0,0.5) -- node[left=15pt] {12} (0,6.5);
-  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,6.5) -- node[above=15pt] {35} (6.5,6.5);
-  \draw[decoration={brace,amplitude=10pt,raise=5pt},decorate] (-6,-6) -- node[left=15pt] {35} (-6,6.5);
-  \draw[fill] (0.25,0.25) circle (.5ex);
-  
-  % view frustum
-  \draw (0.25,0.25) -- (-6,5.25);
-  \draw (0.25,0.25) -- (6.5,5.25);
-  \fill[color=gray,opacity=0.3] (-6,6.5) -- (-6,5.25) -- (0.25,0.25) -- (6.5,5.25) -- (6.5,6.5);
-  
-  %\draw[decoration={brace,mirror,raise=5pt},decorate] (0.5,0) -- node[below=6pt] {Render distance} (6.5,0);
-  \end{tikzpicture}
-  \caption[Top-down view of vertex buffer array]{
-    A top-down view of the vertex buffer array, assuming a render distance of 12.
-    The player's view cone is shown facing north.
-    Each cell contains 16 RenderChunks.
-    When the player crosses a horizontal chunk boundary, every buffer in the grid is moved once space.
-  }
-  \label{fig:grid}
-\end{figure}
 
 \begin{figure}
   \centering
