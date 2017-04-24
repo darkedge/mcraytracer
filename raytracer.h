@@ -36,18 +36,27 @@ struct Vertex {
 };
 
 struct Pos4 {
-    float3 v0;
-    float3 v1;
-    float3 v2;
-    float3 v3;
+    union {
+        struct {
+            float3 v0;
+            float3 v1;
+            float3 v2;
+            float3 v3;
+        };
+        float3 vertices[4];
+    };
 };
 
 struct Quad {
-    //Vertex vertices[4];
-    Vertex v0;
-    Vertex v1;
-    Vertex v2;
-    Vertex v3;
+    union {
+        struct {
+            Vertex v0;
+            Vertex v1;
+            Vertex v2;
+            Vertex v3;
+        };
+        Vertex vertices[4];
+    };    
 };
 
 struct Viewport {

@@ -13,6 +13,7 @@
 #include <vector>
 #include <tuple>
 #include <map>
+#include <set>
 
 #include "raytracer.h"
 #include <jni.h>
@@ -426,8 +427,51 @@ void ShiftGrid(int shiftX, int shiftZ) {
     }
 }
 
-void InsertQuads(Quad* quads, int numQuads) {
+struct Leaf {
+    std::vector<Pos4> quads; // if leaf
+};
 
+struct Node {
+    Node* children[8];
+    
+};
+
+struct Octree {
+    void Insert(int x, int y, int z, Pos4 pos) {
+        
+    }
+};
+
+void BuildOctree(Quad* quads, int numQuads) {
+    std::set<std::tuple<int, int, int>> cells;
+    //std::map<std::tuple<int, int, int>, std::vector<float3>> map;
+    Octree octree = {};
+    for (int i = 0; i < numQuads; i++) {
+        Quad& q = quads[i];
+        // List all cells this quad occupies
+        for (int j = 0; j < 4; i++) {
+            int x = (int)floorf(q.vertices[j].pos.x);
+            int y = (int)floorf(q.vertices[j].pos.y);
+            int z = (int)floorf(q.vertices[j].pos.z);
+            cells.insert(std::make_tuple(x,y,z));
+        }
+        // Paste quad in every cell
+        for (auto& tuple : cells) {
+            int x = std::get<0>(tuple);
+            int y = std::get<1>(tuple);
+            int z = std::get<2>(tuple);
+
+            Pos4 pos;
+            for (int j = 0; j < 4; i++) {
+                pos.vertices[i] = q.vertices[j].pos;
+            }
+            octree.Insert(x, y, z, pos);
+        }
+    }
+
+    for (int i = 0; i < 8; i++) {
+        
+    }
 }
 
 struct VertexBuffer {
@@ -440,9 +484,7 @@ struct VertexBuffer {
 };
 
 static int totalTriangles;
-//static VertexBuffer counts[69696];
 static VertexBuffer counts[17424]; // 33 * 33 * 16 * 1
-//static int4 bufferIndices[DEVICE_PTRS_COUNT]; // TODO: Build something like this?
 static int2 playerChunkPosition;
 
 void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, jobject data, jint size) {
@@ -472,8 +514,8 @@ void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, j
 
     bufferIndices[chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY] = id;
 
-    //Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
-    //InsertQuads(buf, size / VERTEX_SIZE_BYTES / 4);
+    Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
+    BuildOctree(buf, size / VERTEX_SIZE_BYTES / 4);
     
     Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" now contains ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
 }
