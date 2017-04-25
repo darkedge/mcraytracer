@@ -427,50 +427,128 @@ void ShiftGrid(int shiftX, int shiftZ) {
     }
 }
 
-struct Leaf {
-    std::vector<Pos4> quads; // if leaf
-};
+// https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
+// Inverse of Part1By2 - "delete" all bits not at positions divisible by 3
+int Compact1By2(int x) {
+    x &= 0x09249249;                  // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+    x = (x ^ (x >> 2)) & 0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+    x = (x ^ (x >> 4)) & 0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+    x = (x ^ (x >> 8)) & 0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+    x = (x ^ (x >> 16)) & 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
+    return x;
+}
 
-struct Node {
-    Node* children[8];
-    
-};
+int DecodeMorton3X(int code) {
+    return Compact1By2(code >> 0);
+}
 
-struct Octree {
-    void Insert(int x, int y, int z, Pos4 pos) {
-        
-    }
-};
+int DecodeMorton3Y(int code) {
+    return Compact1By2(code >> 1);
+}
 
+int DecodeMorton3Z(int code) {
+    return Compact1By2(code >> 2);
+}
+
+static std::set<std::tuple<int, int, int, int>> cells;
+static std::vector<int> grid[16][16][16];
 void BuildOctree(Quad* quads, int numQuads) {
-    std::set<std::tuple<int, int, int>> cells;
-    //std::map<std::tuple<int, int, int>, std::vector<float3>> map;
-    Octree octree = {};
     for (int i = 0; i < numQuads; i++) {
         Quad& q = quads[i];
         // List all cells this quad occupies
-        for (int j = 0; j < 4; i++) {
+        for (int j = 0; j < 4; j++) {
             int x = (int)floorf(q.vertices[j].pos.x);
             int y = (int)floorf(q.vertices[j].pos.y);
             int z = (int)floorf(q.vertices[j].pos.z);
-            cells.insert(std::make_tuple(x,y,z));
+            cells.insert(std::make_tuple(x, y, z, i));
         }
         // Paste quad in every cell
         for (auto& tuple : cells) {
             int x = std::get<0>(tuple);
             int y = std::get<1>(tuple);
             int z = std::get<2>(tuple);
+            int j = std::get<3>(tuple);
+            grid[x][y][z].push_back(j);
+        }
+        cells.clear();
+    }
+    // Grid is filled, create octree
+    std::vector<int> builder(8, 0);
 
-            Pos4 pos;
-            for (int j = 0; j < 4; i++) {
-                pos.vertices[i] = q.vertices[j].pos;
+    // Walk across grid using z-order curve
+    // https://en.wikipedia.org/wiki/Z-order_curve
+
+    // Used for counting nodes
+    int idx1 = 0;
+    int idx2 = 0;
+    int idx3 = 0;
+
+    bool insertNode1 = true;
+    bool insertNode2 = true;
+    bool insertNode3 = true;
+    
+    for (int i = 0; i < 16 * 16 * 16; i++) {
+        // TODO: Optimize using masks and shifts if necessary
+        // Node indices
+        int l0 = i / 512; int l3 = i % 512;
+        int l1 = l3 / 64; l3 %= 64;
+        int l2 = l3 / 8; l3 %= 8;
+
+        int x = DecodeMorton3X(i);
+        int y = DecodeMorton3Y(i);
+        int z = DecodeMorton3Z(i);
+
+        if (!grid[x][y][z].empty()) {
+            // Check if new nodes need to be created
+            if (insertNode1) {
+                insertNode1 = false;
+                // Store new node index in parent
+                builder[l0] = (int)builder.size();
+                // Construct new node
+                builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
             }
-            octree.Insert(x, y, z, pos);
+            if (insertNode2) {
+                insertNode2 = false;
+                builder[builder[l0] + l1] = (int)builder.size();
+                builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+            }
+            if (insertNode3) {
+                insertNode3 = false;
+                builder[builder[builder[l0] + l1] + l2] = (int)builder.size();
+                builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+            }
+
+            // Insert quads
+            builder[builder[builder[builder[l0] + l1] + l2] + l3] = (int)builder.size();
+            builder.push_back((int)grid[x][y][z].size());
+            builder.insert(builder.end(), grid[x][y][z].begin(), grid[x][y][z].end());
+        }
+
+        // Check if we crossed a node boundary
+        idx3++;
+        if (idx3 == 8) {
+            insertNode3 = true;
+            idx3 = 0;
+            idx2++;
+            if (idx2 == 8) {
+                insertNode2 = true;
+                idx2 = 0;
+                idx1++;
+                if (idx1 == 8) {
+                    insertNode1 = true;
+                    idx1 = 0;
+                }
+            }
         }
     }
 
-    for (int i = 0; i < 8; i++) {
-        
+    // Clear grid
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                grid[x][y][z].clear();
+            }
+        }
     }
 }
 
