@@ -51,9 +51,6 @@ extern "C" {
     MJ_EXPORT void StopProfiling(JNIEnv*);
 }
 
-static jfieldID jni_VertexBuffer_count;
-static jfieldID jni_VertexBuffer_glBufferId;
-
 void CacheJNI(JNIEnv* env) {
 #if 0
     // System.out.println
@@ -63,11 +60,6 @@ void CacheJNI(JNIEnv* env) {
     jclass pscls = env->FindClass("java/io/PrintStream");
     jni_println = env->GetMethodID(pscls, "println", "(Ljava/lang/String;)V");
 #endif
-
-    // TODO: Obfuscated names
-    jclass vertexBuffer = env->FindClass("net/minecraft/client/renderer/vertex/VertexBuffer");
-    jni_VertexBuffer_count = env->GetFieldID(vertexBuffer, "count", "I");
-    jni_VertexBuffer_glBufferId = env->GetFieldID(vertexBuffer, "glBufferId", "I");
 }
 
 void Log(JNIEnv* env, const std::string& stdstr) {
@@ -97,12 +89,12 @@ void Log(JNIEnv* env, const std::string& stdstr) {
 static Viewport viewport;
 
 // Host memory
-static void* h_devPtrs[DEVICE_PTRS_COUNT];
-static int h_arraySizes[DEVICE_PTRS_COUNT];
+static void* h_octrees[DEVICE_PTRS_COUNT];
+static void* h_vertexBuffers[DEVICE_PTRS_COUNT];
 
 // Device memory backing arrays for textures
-static void* d_devPtrs;
-static void* d_arraySizes;
+static void* d_octrees;
+static void* d_vertexBuffers;
 
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
@@ -111,29 +103,10 @@ void Init(JNIEnv* env) {
     CacheJNI(env);
     Log(env, "Init");
 
-#if 0
-    err = cudaHostAlloc((void**)&h_devPtrs, DEVICE_PTRS_COUNT * sizeof(void*), cudaHostAllocMapped);
-    if (err != cudaSuccess) {
-        Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-    err = cudaHostAlloc(&h_arraySizes, DEVICE_PTRS_COUNT * sizeof(int), cudaHostAllocMapped);
-    if (err != cudaSuccess) {
-        Log(env, std::string("cudaMalloc failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-    err = cudaHostGetDevicePointer(&cudah_devPtrs, h_devPtrs, 0);
-    if (err != cudaSuccess) {
-        Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-    err = cudaHostGetDevicePointer(&cudah_arraySizes, h_arraySizes, 0);
-    if (err != cudaSuccess) {
-        Log(env, std::string("cudaHostGetDevicePointer failed: ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-    }
-#endif
-
     // Create CUDA arrays
     {
-        CUDA_TRY(cudaMalloc(&d_devPtrs, sizeof(h_devPtrs)));
-        CUDA_TRY(cudaMalloc(&d_arraySizes, sizeof(h_arraySizes)));
+        CUDA_TRY(cudaMalloc(&d_octrees, sizeof(h_octrees)));
+        CUDA_TRY(cudaMalloc(&d_vertexBuffers, sizeof(h_vertexBuffers)));
     }
 
     cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
@@ -153,14 +126,14 @@ void Destroy(JNIEnv* env) {
     }
 
     // Free arrays
-    if (d_arraySizes) {
-        cudaFree(d_arraySizes);
-        d_arraySizes = NULL;
+    if (d_vertexBuffers) {
+        cudaFree(d_vertexBuffers);
+        d_vertexBuffers = NULL;
     }
 
-    if (d_devPtrs) {
-        cudaFree(d_devPtrs);
-        d_devPtrs = NULL;
+    if (d_octrees) {
+        cudaFree(d_octrees);
+        d_octrees = NULL;
     }
 }
 
@@ -214,63 +187,12 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
     rtResize(env, screenWidth, screenHeight);
 }
 
-// Mapped to [0, GRID_DIM)
-struct GfxRes2DevPtr {
-    int count;
-    int x;
-    int y;
-    int z;
-    //int i;
-};
-
-static std::vector<cudaGraphicsResource*> allResources; // Application lifetime
-static std::vector<cudaGraphicsResource*> frameResources; // Cleared after every frame
-static std::vector<GfxRes2DevPtr> translations;
 static float3 viewEntity;
 
 jint Raytrace(JNIEnv* env) {
-    // Clear kernel buffers
-    memset(h_devPtrs, 0, sizeof(h_devPtrs));
-    memset(h_arraySizes, 0, sizeof(h_arraySizes));
-
-    if (!frameResources.empty()) {
-        // Map all resources
-        CUDA_TRY(cudaGraphicsMapResources((int) frameResources.size(), frameResources.data()));
     
-        // Update device pointers
-        for (int i = 0; i < translations.size(); i++) {
-            GfxRes2DevPtr& t = translations[i];
 
-            size_t bufferSize;
-            size_t idx = t.x * GRID_DIM * 16 + t.z * 16 + t.y;
-            void* devicePointer;
-            cudaError err;
-            if ((err = cudaGraphicsResourceGetMappedPointer(&devicePointer, &bufferSize, frameResources[i])) != cudaSuccess) {
-                Log(env, std::string("Error during cudaGraphicsResourceGetMappedPointer, error code ") + std::to_string(err) + std::string(": ") + cudaGetErrorString(err));
-                continue;
-            }
-            // FIXME: Some buffers do not pass this check for some reason
-            if (bufferSize >= t.count * VERTEX_SIZE_BYTES) {
-                h_devPtrs[idx] = devicePointer;
-                h_arraySizes[idx] = t.count / 4;
-            }
-        }
-    }
-
-    // memcpy to texture memory
-    cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_arraySizes, h_arraySizes, sizeof(h_arraySizes), cudaMemcpyHostToDevice);
-    
-    rtRaytrace(env, gfxResource, texHeight, d_devPtrs, d_arraySizes, viewport, viewEntity);
-
-    if (!frameResources.empty()) {
-        // Unmap all resources
-        CUDA_TRY(cudaGraphicsUnmapResources((int) frameResources.size(), frameResources.data()));
-
-        // Clear per-frame data
-        frameResources.clear();
-        translations.clear();
-    }
+    rtRaytrace(env, gfxResource, texHeight, d_octrees, d_vertexBuffers, viewport, viewEntity);
 
     return texture;
 }
@@ -288,61 +210,6 @@ void SetViewingPlane(JNIEnv* env, jobject arr) {
 
     viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
-
-#if 0
-// Currently only called for the opaque pass
-void SetVertexBuffer(JNIEnv* env, jint chunkX, jint chunkY, jint chunkZ, jint, jobject obj) {
-    int count = env->GetIntField(obj, jni_VertexBuffer_count);
-
-    // CUDA cannot register empty buffers
-    if (count == 0) return;
-
-    int glBufferId = env->GetIntField(obj, jni_VertexBuffer_glBufferId);
-
-    //Log(env, std::to_string(glBufferId) + std::string(" vertex count: ") + std::to_string(count));
-
-    if ((glBufferId + 1) > allResources.size()) {
-        allResources.resize((glBufferId + 1), NULL);
-    }
-
-    if (!allResources[glBufferId]) {
-        // Register buffer in CUDA
-        // TODO: Unregister buffer on destroy using cudaGraphicsUnregisterResource
-        cudaGraphicsResource* dst = NULL;
-        CUDA_TRY(cudaGraphicsGLRegisterBuffer(&dst, glBufferId, cudaGraphicsRegisterFlagsReadOnly));
-        allResources[glBufferId] = dst;
-
-#if 0
-        // Print buffer for testing
-        cudaGraphicsMapResources(1, &dst);
-        void* cudaPtr;
-        size_t bufferSize;
-        cudaGraphicsResourceGetMappedPointer(&cudaPtr, &bufferSize, dst);
-        assert(bufferSize);
-        Vertex* vertices = (Vertex*) malloc(bufferSize);
-        cudaMemcpy(vertices, cudaPtr, bufferSize, cudaMemcpyDeviceToHost);
-        _CrtDbgBreak();
-        free(vertices);
-        cudaGraphicsUnmapResources(1, &dst);
-#endif
-    }
-
-    int x = (int)((double)chunkX - viewEntity.x) / 16 + MAX_RENDER_DISTANCE;
-    int y = chunkY / 16;
-    int z = (int)((double)chunkZ - viewEntity.z) / 16 + MAX_RENDER_DISTANCE;
-    assert(x >= 0); assert(x < GRID_DIM);
-    assert(y >= 0); assert(y < 16);
-    assert(z >= 0); assert(z < GRID_DIM);
-
-    GfxRes2DevPtr translation = { 0 };
-    translation.count = count;
-    translation.x = x;
-    translation.y = y;
-    translation.z = z;
-    translations.push_back(translation);
-    frameResources.push_back(allResources[glBufferId]);
-}
-#endif
 
 static int bufferIndices[DEVICE_PTRS_COUNT];
 
