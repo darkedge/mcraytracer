@@ -452,16 +452,80 @@ int DecodeMorton3Z(int code) {
 
 static std::set<std::tuple<int, int, int, int>> cells;
 static std::vector<int> grid[16][16][16];
-void BuildOctree(Quad* quads, int numQuads) {
+void BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
+    int duplicates = 0;
     for (int i = 0; i < numQuads; i++) {
         Quad& q = quads[i];
-        // List all cells this quad occupies
-        for (int j = 0; j < 4; j++) {
-            int x = (int)floorf(q.vertices[j].pos.x);
-            int y = (int)floorf(q.vertices[j].pos.y);
-            int z = (int)floorf(q.vertices[j].pos.z);
-            cells.insert(std::make_tuple(x, y, z, i));
+
+        
+        float3 v0 = q.vertices[0].pos;
+        float3 v1 = q.vertices[1].pos;
+        float3 v2 = q.vertices[2].pos;
+        float3 v3 = q.vertices[3].pos;
+
+        // We assume that input vertices do not have precision errors
+        // Check if this quad is aligned on the grid (true for most world-gen blocks)
+        if (v0.x == v1.x && v1.x == v2.x && v2.x == v3.x && floorf(v0.x) == v0.x) {
+            // Check which side the quad is facing based on the direction of an edge
+            if (v2.z - v1.z > 0) {
+                // We get the vertex that corresponds with the cell index
+                // -x
+                int x = (int)floorf(q.vertices[1].pos.x);
+                int y = (int)floorf(q.vertices[1].pos.y);
+                int z = (int)floorf(q.vertices[1].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            } else {
+                // On positive sided faces, we get the closest one and shift the correct axis
+                // +x
+                int x = (int)floorf(q.vertices[2].pos.x) - 1;
+                int y = (int)floorf(q.vertices[2].pos.y);
+                int z = (int)floorf(q.vertices[2].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            }
+        } else if (v0.y == v1.y && v1.y == v2.y && v2.y == v3.y && floorf(v0.y) == v0.y) {
+            if (v1.z - v0.z > 0) {
+                // +y
+                int x = (int)floorf(q.vertices[0].pos.x);
+                int y = (int)floorf(q.vertices[0].pos.y) - 1;
+                int z = (int)floorf(q.vertices[0].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            } else {
+                // -y
+                int x = (int)floorf(q.vertices[1].pos.x);
+                int y = (int)floorf(q.vertices[1].pos.y);
+                int z = (int)floorf(q.vertices[1].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            }
+        } else if (v0.z == v1.z && v1.z == v2.z && v2.z == v3.z && floorf(v0.z) == v0.z) {
+            if (v2.x - v1.x > 0) {
+                // +z
+                int x = (int)floorf(q.vertices[1].pos.x);
+                int y = (int)floorf(q.vertices[1].pos.y);
+                int z = (int)floorf(q.vertices[1].pos.z - 1);
+                cells.insert(std::make_tuple(x, y, z, i));
+            } else {
+                // -z
+                int x = (int)floorf(q.vertices[2].pos.x);
+                int y = (int)floorf(q.vertices[2].pos.y);
+                int z = (int)floorf(q.vertices[2].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            }
+        } else {
+            // Quad does not align with the grid
+            // Copy quad to all touching cells
+            for (int j = 0; j < 4; j++) {
+                int x = (int)floorf(q.vertices[j].pos.x);
+                int y = (int)floorf(q.vertices[j].pos.y);
+                int z = (int)floorf(q.vertices[j].pos.z);
+                cells.insert(std::make_tuple(x, y, z, i));
+            }
         }
+
+        // Duplicate quad counter
+        if (!cells.empty()) {
+            duplicates += (int) cells.size() - 1;
+        }
+
         // Paste quad in every cell
         for (auto& tuple : cells) {
             int x = std::get<0>(tuple);
@@ -472,12 +536,20 @@ void BuildOctree(Quad* quads, int numQuads) {
         }
         cells.clear();
     }
+
+    // Voxel-sized cubes do not contain duplicates
+    if (duplicates > 0) {
+        Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" contains ") + std::to_string(duplicates) + std::string(" duplicate quads."));
+    }
+
     // Grid is filled, create octree
     std::vector<int> builder(8, 0);
 
     // Walk across grid using z-order curve
     // https://en.wikipedia.org/wiki/Z-order_curve
+    // This creates a depth-first traversal of the octree
 
+    // The octree has a fixed depth, so we can just hard-code for each level
     // Used for counting nodes
     int idx1 = 0;
     int idx2 = 0;
@@ -574,7 +646,7 @@ void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, j
     totalTriangles -= counts[id].numTris;
     if (counts[id].index == -1) {
         if (counts[id].x != x || counts[id].y != y || counts[id].z != z) {
-            Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" location changed!"));
+            //Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" location changed!"));
         }
     }
     counts[id] = {};
@@ -593,9 +665,9 @@ void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, j
     bufferIndices[chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY] = id;
 
     Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
-    BuildOctree(buf, size / VERTEX_SIZE_BYTES / 4);
+    BuildOctree(env, id, buf, size / VERTEX_SIZE_BYTES / 4);
     
-    Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" now contains ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
+    //Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" now contains ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
 }
 
 // This is called before SetVertexBuffer in order to translate the renderChunks.
@@ -606,7 +678,7 @@ void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
     int chunkZ = (int) floor(z / 16);
     if (chunkX != playerChunkPosition.x || chunkZ != playerChunkPosition.y) {
         ShiftGrid(chunkX - playerChunkPosition.x, chunkZ - playerChunkPosition.y);
-        Log(env, std::string("Shifted grid (") + std::to_string(chunkX - playerChunkPosition.x) + std::string(", ") + std::to_string(chunkZ - playerChunkPosition.y) + std::string("), new chunk positon: (") + std::to_string(chunkX) + std::string(", ") + std::to_string(chunkZ) + std::string(")"));
+        //Log(env, std::string("Shifted grid (") + std::to_string(chunkX - playerChunkPosition.x) + std::string(", ") + std::to_string(chunkZ - playerChunkPosition.y) + std::string("), new chunk positon: (") + std::to_string(chunkX) + std::string(", ") + std::to_string(chunkZ) + std::string(")"));
     }
     playerChunkPosition.x = chunkX;
     playerChunkPosition.y = chunkZ;
