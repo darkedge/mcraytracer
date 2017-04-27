@@ -110,77 +110,75 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
             int offset;
 
             // Traverse octree
-            while (true) {
-                char4 abcd = make_char4(0, 0, 0, 0);
-                for (; abcd.x < 8; abcd.x++) {
-                    offset = head[abcd.x];
-                    if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 8.0f)) {
-                        head = octree + offset;
-                        for (; abcd.y < 8; abcd.y++) {
-                            offset = head[abcd.y];
-                            if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 4.0f)) {
-                                head = octree + offset;
-                                for (; abcd.z < 8; abcd.z++) {
-                                    offset = head[abcd.z];
-                                    if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 2.0f)) {
-                                        head = octree + offset;
-                                        for (; abcd.w < 8; abcd.w++) {
-                                            offset = head[abcd.w];
-                                            if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 1.0f)) {
-                                                head = octree + offset;
-                                                for (int i = 1; i < head[0]; i++) {
-                                                    Quad *q = &quads[head[i]];
-                                                    // Triangle 1
-                                                    float3 v0v1 = q->v1.pos - q->v0.pos; // e1
-                                                    float3 v0v2 = q->v2.pos - q->v0.pos; // e2
-                                                    float3 pvec = cross(direction, v0v2); // P
-                                                    float det = dot(v0v1, pvec);
+            char4 abcd = make_char4(0, 0, 0, 0);
+            for (; abcd.x < 8; abcd.x++) {
+                offset = head[abcd.x];
+                if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 8.0f)) {
+                    head = octree + offset;
+                    for (; abcd.y < 8; abcd.y++) {
+                        offset = head[abcd.y];
+                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.y, 4.0f)) {
+                            head = octree + offset;
+                            for (; abcd.z < 8; abcd.z++) {
+                                offset = head[abcd.z];
+                                if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.z, 2.0f)) {
+                                    head = octree + offset;
+                                    for (; abcd.w < 8; abcd.w++) {
+                                        offset = head[abcd.w];
+                                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.w, 1.0f)) {
+                                            head = octree + offset;
+                                            for (int i = 1; i < head[0]; i++) {
+                                                Quad *q = &quads[head[i]];
+                                                // Triangle 1
+                                                float3 v0v1 = q->v1.pos - q->v0.pos; // e1
+                                                float3 v0v2 = q->v2.pos - q->v0.pos; // e2
+                                                float3 pvec = cross(direction, v0v2); // P
+                                                float det = dot(v0v1, pvec);
 
-                                                    if (det < EPSILON) continue; // Ray does not hit front face
+                                                if (det < EPSILON) continue; // Ray does not hit front face
 
-                                                    det = 1.0f / det;
+                                                det = 1.0f / det;
 
-                                                    float3 tvec = raypos - q->v0.pos;
-                                                    float u = dot(tvec, pvec) * det;
-                                                    if (!(u < 0.0f || u > 1.0f)) {
-                                                        float3 qvec = cross(tvec, v0v1);
-                                                        float v = dot(direction, qvec) * det;
+                                                float3 tvec = raypos - q->v0.pos;
+                                                float u = dot(tvec, pvec) * det;
+                                                if (!(u < 0.0f || u > 1.0f)) {
+                                                    float3 qvec = cross(tvec, v0v1);
+                                                    float v = dot(direction, qvec) * det;
 
-                                                        if (!(v < 0.0f || u + v > 1.0f)) {
-                                                            float dist = dot(v0v2, qvec) * det;
+                                                    if (!(v < 0.0f || u + v > 1.0f)) {
+                                                        float dist = dot(v0v2, qvec) * det;
 
-                                                            if (dist < distance) {
-                                                                distance = dist;
-                                                            }
-
-                                                            // Found a hit
-                                                            continue;
+                                                        if (dist < distance) {
+                                                            distance = dist;
                                                         }
+
+                                                        // Found a hit
+                                                        continue;
                                                     }
+                                                }
 
-                                                    // Triangle 2
-                                                    // TODO: Optimize this further
-                                                    det = -det;
-                                                    tvec = raypos - q->v2.pos;
-                                                    u = dot(tvec, pvec) * det;
+                                                // Triangle 2
+                                                // TODO: Optimize this further
+                                                det = -det;
+                                                tvec = raypos - q->v2.pos;
+                                                u = dot(tvec, pvec) * det;
 
-                                                    if (!(u < 0.0f || u > 1.0f)) {
+                                                if (!(u < 0.0f || u > 1.0f)) {
 
-                                                        float3 qvec = cross(tvec, v0v1);
-                                                        float v = dot(direction, qvec) * det;
+                                                    float3 qvec = cross(tvec, v0v1);
+                                                    float v = dot(direction, qvec) * det;
 
-                                                        if (!(v < 0.0f || u + v > 1.0f)) {
+                                                    if (!(v < 0.0f || u + v > 1.0f)) {
 
-                                                            float dist = dot(v0v2, qvec) * det;
+                                                        float dist = dot(v0v2, qvec) * det;
 
-                                                            if (dist < distance) {
-                                                                distance = dist;
-                                                            }
+                                                        if (dist < distance) {
+                                                            distance = dist;
                                                         }
                                                     }
                                                 }
-                                                if (distance != FLT_MAX) goto done;
                                             }
+                                            if (distance != FLT_MAX) goto done;
                                         }
                                     }
                                 }
