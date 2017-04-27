@@ -32,6 +32,7 @@ static GLuint texture;
 static cudaGraphicsResource* gfxResource;
 
 #define MJ_EXPORT __declspec(dllexport)
+#define EPSILON 0.00001f
 
 /*
     "For optimal performance, however, a thread should pass the JNIEnv that it
@@ -287,6 +288,20 @@ void ShiftGrid(int shiftX, int shiftZ) {
 }
 
 // https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
+// "Insert" two 0 bits after each of the 10 low bits of x
+int Part1By2(int x) {
+	x &= 0x000003ff;                  // x = ---- ---- ---- ---- ---- --98 7654 3210
+	x = (x ^ (x << 16)) & 0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+	x = (x ^ (x << 8)) & 0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+	x = (x ^ (x << 4)) & 0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+	x = (x ^ (x << 2)) & 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+	return x;
+}
+
+int EncodeMorton3(int x, int y, int z) {
+	return (Part1By2(z) << 2) + (Part1By2(y) << 1) + Part1By2(x);
+}
+
 // Inverse of Part1By2 - "delete" all bits not at positions divisible by 3
 int Compact1By2(int x) {
     x &= 0x09249249;                  // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
@@ -309,126 +324,193 @@ int DecodeMorton3Z(int code) {
     return Compact1By2(code >> 2);
 }
 
+struct MortonQuad {
+	int morton;
+	int quad;
+};
+
+struct MortonCompare {
+	bool operator() (const MortonQuad& lhs, const MortonQuad& rhs) const {
+		return lhs.morton < rhs.morton;
+	}
+};
+
 static std::set<std::tuple<int, int, int, int>> cells;
-static std::vector<int> grid[16][16][16];
+//static std::vector<int> grid[16][16][16];
+static std::multiset<MortonQuad, MortonCompare> grid;
 static std::vector<int> builder;
 void* BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
     int duplicates = 0;
 
-    // Clear grid
-    for (int x = 0; x < 16; x++) {
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                grid[x][y][z].clear();
-            }
-        }
-    }
+	grid.clear();
 
     for (int i = 0; i < numQuads; i++) {
         Quad& q = quads[i];
-
         
         float3 v0 = q.vertices[0].pos;
         float3 v1 = q.vertices[1].pos;
         float3 v2 = q.vertices[2].pos;
         float3 v3 = q.vertices[3].pos;
 
-        // We assume that input vertices do not have precision errors
+        // Input vertices might have precision errors!
         // Check if this quad is aligned on the grid (true for most world-gen blocks)
-        if (v0.x == v1.x && v1.x == v2.x && v2.x == v3.x && floorf(v0.x) == v0.x) {
+        if (v0.x == v1.x && v1.x == v2.x && v2.x == v3.x && fabsf(roundf(v0.x) - v0.x) <= EPSILON) {
             // Check which side the quad is facing based on the direction of an edge
             if (v2.z - v1.z > 0) {
                 // We get the vertex that corresponds with the cell index
                 // -x
-                int x = (int)floorf(q.vertices[1].pos.x);
-                int y = (int)floorf(q.vertices[1].pos.y);
-                int z = (int)floorf(q.vertices[1].pos.z);
+                int x = max((int)floorf(q.vertices[1].pos.x), 0);
+                int y = max((int)floorf(q.vertices[1].pos.y), 0);
+                int z = max((int)floorf(q.vertices[1].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
                 cells.insert(std::make_tuple(x, y, z, i));
             } else {
                 // On positive sided faces, we get the closest one and shift the correct axis
                 // +x
-                int x = (int)floorf(q.vertices[2].pos.x) - 1;
-                int y = (int)floorf(q.vertices[2].pos.y);
-                int z = (int)floorf(q.vertices[2].pos.z);
+                int x = max((int)floorf(q.vertices[2].pos.x) - 1, 0);
+                int y = max((int)floorf(q.vertices[2].pos.y), 0);
+                int z = max((int)floorf(q.vertices[2].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
                 cells.insert(std::make_tuple(x, y, z, i));
             }
-        } else if (v0.y == v1.y && v1.y == v2.y && v2.y == v3.y && floorf(v0.y) == v0.y) {
+        } else if (v0.y == v1.y && v1.y == v2.y && v2.y == v3.y && fabsf(roundf(v0.y) - v0.y) <= EPSILON) {
             if (v1.z - v0.z > 0) {
                 // +y
-                int x = (int)floorf(q.vertices[0].pos.x);
-                int y = (int)floorf(q.vertices[0].pos.y) - 1;
-                int z = (int)floorf(q.vertices[0].pos.z);
+                int x = max((int)floorf(q.vertices[0].pos.x), 0);
+                int y = max((int)floorf(q.vertices[0].pos.y) - 1, 0);
+                int z = max((int)floorf(q.vertices[0].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
                 cells.insert(std::make_tuple(x, y, z, i));
             } else {
                 // -y
-                int x = (int)floorf(q.vertices[1].pos.x);
-                int y = (int)floorf(q.vertices[1].pos.y);
-                int z = (int)floorf(q.vertices[1].pos.z);
-                cells.insert(std::make_tuple(x, y, z, i));
-            }
-        } else if (v0.z == v1.z && v1.z == v2.z && v2.z == v3.z && floorf(v0.z) == v0.z) {
-            if (v2.x - v1.x > 0) {
-                // +z
-                int x = (int)floorf(q.vertices[1].pos.x);
-                int y = (int)floorf(q.vertices[1].pos.y);
-                int z = (int)floorf(q.vertices[1].pos.z - 1);
-                cells.insert(std::make_tuple(x, y, z, i));
-            } else {
-                // -z
-                int x = (int)floorf(q.vertices[2].pos.x);
-                int y = (int)floorf(q.vertices[2].pos.y);
-                int z = (int)floorf(q.vertices[2].pos.z);
-                cells.insert(std::make_tuple(x, y, z, i));
-            }
-        } else {
-            // Quad does not align with the grid
-            // Copy quad to all touching cells
-            for (int j = 0; j < 4; j++) {
-                int x = (int)floorf(q.vertices[j].pos.x);
-                int y = (int)floorf(q.vertices[j].pos.y);
-                int z = (int)floorf(q.vertices[j].pos.z);
-                cells.insert(std::make_tuple(x, y, z, i));
-            }
-        }
+                int x = max((int)floorf(q.vertices[1].pos.x), 0);
+                int y = max((int)floorf(q.vertices[1].pos.y), 0);
+				int z = max((int)floorf(q.vertices[1].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
+				cells.insert(std::make_tuple(x, y, z, i));
+			}
+		}
+		else if (v0.z == v1.z && v1.z == v2.z && v2.z == v3.z && fabsf(roundf(v0.z) - v0.z) <= EPSILON) {
+			if (v2.x - v1.x > 0) {
+				// +z
+				int x = max((int)floorf(q.vertices[1].pos.x), 0);
+				int y = max((int)floorf(q.vertices[1].pos.y), 0);
+				int z = max((int)floorf(q.vertices[1].pos.z - 1), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
+				cells.insert(std::make_tuple(x, y, z, i));
+			}
+			else {
+				// -z
+				int x = max((int)floorf(q.vertices[2].pos.x), 0);
+				int y = max((int)floorf(q.vertices[2].pos.y), 0);
+				int z = max((int)floorf(q.vertices[2].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
+				cells.insert(std::make_tuple(x, y, z, i));
+			}
+		}
+		else {
+			// Quad does not align with the grid
+			// Copy quad to all touching cells
+			for (int j = 0; j < 4; j++) {
+				int x = max((int)floorf(q.vertices[j].pos.x), 0);
+				int y = max((int)floorf(q.vertices[j].pos.y), 0);
+				int z = max((int)floorf(q.vertices[j].pos.z), 0);
+				assert(x >= 0 && y >= 0 && z >= 0 && x < 16 && y < 16 && z < 16);
+				cells.insert(std::make_tuple(x, y, z, i));
+			}
+		}
 
-        // Duplicate quad counter
-        if (!cells.empty()) {
-            duplicates += (int) cells.size() - 1;
-        }
+		// Duplicate quad counter
+		if (!cells.empty()) {
+			duplicates += (int)cells.size() - 1;
+		}
 
-        // Paste quad in every cell
-        for (auto& tuple : cells) {
-            int x = std::get<0>(tuple);
-            int y = std::get<1>(tuple);
-            int z = std::get<2>(tuple);
-            int j = std::get<3>(tuple);
-            grid[x][y][z].push_back(j);
-        }
-        cells.clear();
-    }
+		// Paste quad in every cell
+		for (auto& tuple : cells) {
+			int x = std::get<0>(tuple);
+			int y = std::get<1>(tuple);
+			int z = std::get<2>(tuple);
+			int j = std::get<3>(tuple);
+			// TODO: Check if calculating the Morton code earlier is faster
+			MortonQuad mq;
+			mq.morton = EncodeMorton3(x, y, z);
+			assert(mq.morton < 4096);
+			mq.quad = j;
+			grid.insert(mq);
+		}
+		cells.clear();
+	}
 
-    // Voxel-sized cubes do not contain duplicates
-    if (duplicates > 0) {
-        Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" contains ") + std::to_string(duplicates) + std::string(" duplicate quads."));
-    }
+	// Voxel-sized cubes do not contain duplicates
+	if (duplicates > 0) {
+		Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" contains ") + std::to_string(duplicates) + std::string(" duplicate quads."));
+	}
 
-    builder.clear();
-    builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+	builder.clear();
+	builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
 
-    // Walk across grid using z-order curve
-    // https://en.wikipedia.org/wiki/Z-order_curve
-    // This creates a depth-first traversal of the octree
+	// Walk across grid using z-order curve
+	// https://en.wikipedia.org/wiki/Z-order_curve
+	// This creates a depth-first traversal of the octree
 
-    // The octree has a fixed depth, so we can just hard-code for each level
-    // Used for counting nodes
-    int idx1 = 0;
-    int idx2 = 0;
-    int idx3 = 0;
+	// The octree has a fixed depth, so we can just hard-code for each level
+	// Used for counting nodes
+	int idx1 = -1;
+	int idx2 = -1;
+	int idx3 = -1;
 
-    bool insertNode1 = true;
-    bool insertNode2 = true;
-    bool insertNode3 = true;
-    
+	int lastMorton = -1;
+
+#if 1
+	for (auto q = grid.begin(); q != grid.end(); q++) {
+		int i = (*q).morton;
+
+		if (i == lastMorton) {
+			builder.push_back((*q).quad);
+			continue;
+		}
+		lastMorton = i;
+
+		int l0 = i / 512; int l3 = i % 512;
+		int l1 = l3 / 64; l3 %= 64;
+		int l2 = l3 / 8; l3 %= 8;
+
+		// Check if new nodes need to be created
+		if (idx1 != l1) {
+			idx1 = l1;
+			// Store new node index in parent
+			builder[l0] = (int)builder.size();
+			// Construct new node
+			builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+		}
+		if (idx2 != l1) {
+			idx2 = l1;
+			builder[builder[l0] + l1] = (int)builder.size();
+			builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+		}
+		if (idx3 != l3) {
+			idx3 = l3;
+			builder[builder[builder[l0] + l1] + l2] = (int)builder.size();
+			builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
+		}
+
+		// Insert quads
+		builder[builder[builder[builder[l0] + l1] + l2] + l3] = (int)builder.size();
+
+		// Count quads
+		int sum = 0;
+		for (auto p = q; p != grid.end(); p++) {
+			if (i == (*p).morton) {
+				sum++;
+			} else {
+				break;
+			}
+		}
+
+		builder.push_back(sum);
+		builder.push_back((*q).quad);
+	}
+#else    
     for (int i = 0; i < 16 * 16 * 16; i++) {
         // TODO: Optimize using masks and shifts if necessary
         // Node indices
@@ -483,6 +565,7 @@ void* BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
             }
         }
     }
+#endif
 
     // Upload octree to CUDA
     void* devPtr;
