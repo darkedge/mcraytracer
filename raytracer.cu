@@ -6,6 +6,8 @@
 #define BLOCK_SIZE 8 // JOTARO
 #define EPSILON 0.000001f
 
+#define USE_INTRINSICS 0
+
 static uchar4* kernelOutputBuffer;
 static int g_screenWidth;
 static int g_screenHeight;
@@ -23,8 +25,39 @@ static float3 WorldToGrid(float3 f) {
     return fracf(f * (1 / 16.0f));
 }
 
-__global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, const Quad** __restrict__ vertexBuffers, const int* __restrict__ arraySizes, Viewport viewport, float3 origin, char renderChunkY) {
-    __shared__ Quad quads[BLOCK_SIZE * BLOCK_SIZE]; // For caching quads, 64 * 4 * 28 = 7168 bytes
+// https://tavianator.com/fast-branchless-raybounding-box-intersections/
+__device__ bool IntersectRayAABB(float3 origin, float3 dirInv, char4 chunk, char i, float extents) {
+    float3 min, max;
+    min.x = (float)chunk.x + (i & 1) * extents;
+    min.y = (float)chunk.y + ((i >> 1) & 1) * extents;
+    min.z = (float)chunk.z + (i >> 2) * extents;
+
+    max.x = min.x + extents;
+    max.y = min.y + extents;
+    max.z = min.z + extents;
+
+    float t1 = (min.x - origin.x)*dirInv.x;
+    float t2 = (max.x - origin.x)*dirInv.x;
+
+    float tmin = fminf(t1, t2);
+    float tmax = fmaxf(t1, t2);
+
+    t1 = (min.y - origin.y)*dirInv.y;
+    t2 = (max.y - origin.y)*dirInv.y;
+
+    tmin = fmaxf(tmin, fminf(t1, t2));
+    tmax = fminf(tmax, fmaxf(t1, t2));
+
+    t1 = (min.x - origin.z)*dirInv.z;
+    t2 = (max.x - origin.z)*dirInv.z;
+
+    tmin = fmaxf(tmin, fminf(t1, t2));
+    tmax = fminf(tmax, fmaxf(t1, t2));
+
+    return tmax >= tmin;
+}
+
+__global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, const DevicePointers* __restrict__ vertexBuffers, Viewport viewport, float3 origin, char renderChunkY) {
     float3 direction;
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -45,6 +78,8 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
         0
     );
 
+    float3 dirInv = 1.0f / direction;
+
     // All positive values
     float tMaxX = FindFirstT(origin.x, direction.x);
     float tMaxY = FindFirstT(origin.y, direction.y);
@@ -61,81 +96,100 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
 
     float distance = FLT_MAX;
     while (true) {
-        int size;
-        {
-            const int index =
-                (renderChunk.x * GRID_DIM << 4) +
-                (renderChunk.z << 4) +
-                renderChunk.y;
-        
-            // Opaque pass
-            size = arraySizes[index];
-            if (renderChunk.w < size) {
-                memcpy(quads + renderChunk.w, vertexBuffers[index] + renderChunk.w, sizeof(Quad));
-                #if 0
-                Quad q = vertexBuffers[index][renderChunk.w];
-                Pos4* dest = &quads[renderChunk.w];
-                dest->v0 = q.vertices[0].pos;
-                dest->v1 = q.vertices[1].pos;
-                dest->v2 = q.vertices[2].pos;
-                dest->v3 = q.vertices[3].pos;
-                #endif
-            }
-        }
-        __syncthreads();
+        int index =
+            (renderChunk.x * GRID_DIM << 4) +
+            (renderChunk.z << 4) +
+            renderChunk.y;
 
-        for (int j = 0; j < size; j++) {
-            //Pos4 q = quads[j];
-            // Triangle 1
-            float3 v0v1 = quads[j].v1.pos - quads[j].v0.pos; // e1
-            float3 v0v2 = quads[j].v2.pos - quads[j].v0.pos; // e2
-            float3 pvec = cross(direction, v0v2); // P
-            float det = dot(v0v1, pvec);
+        // Get octree at this RenderChunk
+        int* octree = (int*) vertexBuffers[index].octree;
+        if (octree) {
+            // Assume this exists
+            Quad* quads = (Quad*) vertexBuffers[index].vertexBuffer;
+            int* head = octree;
+            int offset;
 
-            if (det < EPSILON) continue; // Ray does not hit front face
+            // Traverse octree
+            while (true) {
+                char4 abcd = make_char4(0, 0, 0, 0);
+                for (; abcd.x < 8; abcd.x++) {
+                    offset = head[abcd.x];
+                    if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 8.0f)) {
+                        head = octree + offset;
+                        for (; abcd.y < 8; abcd.y++) {
+                            offset = head[abcd.y];
+                            if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 4.0f)) {
+                                head = octree + offset;
+                                for (; abcd.z < 8; abcd.z++) {
+                                    offset = head[abcd.z];
+                                    if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 2.0f)) {
+                                        head = octree + offset;
+                                        for (; abcd.w < 8; abcd.w++) {
+                                            offset = head[abcd.w];
+                                            if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 1.0f)) {
+                                                head = octree + offset;
+                                                for (int i = 1; i < head[0]; i++) {
+                                                    Quad *q = &quads[head[i]];
+                                                    // Triangle 1
+                                                    float3 v0v1 = q->v1.pos - q->v0.pos; // e1
+                                                    float3 v0v2 = q->v2.pos - q->v0.pos; // e2
+                                                    float3 pvec = cross(direction, v0v2); // P
+                                                    float det = dot(v0v1, pvec);
 
-            det = 1.0f / det;
+                                                    if (det < EPSILON) continue; // Ray does not hit front face
 
-            float3 tvec = raypos - quads[j].v0.pos;
-            float u = dot(tvec, pvec) * det;
-            if (!(u < 0.0f || u > 1.0f)) {
-                float3 qvec = cross(tvec, v0v1);
-                float v = dot(direction, qvec) * det;
+                                                    det = 1.0f / det;
 
-                if (!(v < 0.0f || u + v > 1.0f)) {
-                    float dist = dot(v0v2, qvec) * det;
+                                                    float3 tvec = raypos - q->v0.pos;
+                                                    float u = dot(tvec, pvec) * det;
+                                                    if (!(u < 0.0f || u > 1.0f)) {
+                                                        float3 qvec = cross(tvec, v0v1);
+                                                        float v = dot(direction, qvec) * det;
 
-                    if (dist < distance) {
-                        distance = dist;
+                                                        if (!(v < 0.0f || u + v > 1.0f)) {
+                                                            float dist = dot(v0v2, qvec) * det;
+
+                                                            if (dist < distance) {
+                                                                distance = dist;
+                                                            }
+
+                                                            // Found a hit
+                                                            continue;
+                                                        }
+                                                    }
+
+                                                    // Triangle 2
+                                                    // TODO: Optimize this further
+                                                    det = -det;
+                                                    tvec = raypos - q->v2.pos;
+                                                    u = dot(tvec, pvec) * det;
+
+                                                    if (!(u < 0.0f || u > 1.0f)) {
+
+                                                        float3 qvec = cross(tvec, v0v1);
+                                                        float v = dot(direction, qvec) * det;
+
+                                                        if (!(v < 0.0f || u + v > 1.0f)) {
+
+                                                            float dist = dot(v0v2, qvec) * det;
+
+                                                            if (dist < distance) {
+                                                                distance = dist;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if (distance != FLT_MAX) goto done;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-
-                    // Found a hit
-                    continue;
                 }
             }
-
-            // Triangle 2
-            // TODO: Optimize this further
-            det = -det;
-            tvec = raypos - quads[j].v2.pos;
-            u = dot(tvec, pvec) * det;
-
-            if (!(u < 0.0f || u > 1.0f)) {
-
-                float3 qvec = cross(tvec, v0v1);
-                float v = dot(direction, qvec) * det;
-
-                if (!(v < 0.0f || u + v > 1.0f)) {
-
-                    float dist = dot(v0v2, qvec) * det;
-
-                    if (dist < distance) {
-                        distance = dist;
-                    }
-                }
-            }
         }
-        if (distance != FLT_MAX) break;
 
 #define TODO_RENDER_DISTANCE 1
         if (tMaxX < tMaxY) {
@@ -143,43 +197,57 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
                 renderChunk.x += step.x;
                 if (renderChunk.x < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.x > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxX += step.x / direction.x;
-                // raypos = tMaxX * direction + origin;
+#if USE_INTRINSICS
                 raypos.x = __fmaf_rn(tMaxX, direction.x, origin.x);
                 raypos.y = __fmaf_rn(tMaxX, direction.y, origin.y);
                 raypos.z = __fmaf_rn(tMaxX, direction.z, origin.z);
+#else
+                raypos = tMaxX * direction + origin;
+#endif
             }
             else {
                 renderChunk.z += step.z;
                 if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += step.z / direction.z;
-                // raypos = tMaxZ * direction + origin;
+#if USE_INTRINSICS
                 raypos.x = __fmaf_rn(tMaxZ, direction.x, origin.x);
                 raypos.y = __fmaf_rn(tMaxZ, direction.y, origin.y);
                 raypos.z = __fmaf_rn(tMaxZ, direction.z, origin.z);
+#else
+                raypos = tMaxZ * direction + origin;
+#endif
             }
         } else {
             if (tMaxY < tMaxZ) {
                 renderChunk.y += step.y;
                 if (renderChunk.y < 0 || renderChunk.y >= 16) break;
                 tMaxY += step.y / direction.y;
-                // raypos = tMaxY * direction + origin;
+#if USE_INTRINSICS
                 raypos.x = __fmaf_rn(tMaxY, direction.x, origin.x);
                 raypos.y = __fmaf_rn(tMaxY, direction.y, origin.y);
                 raypos.z = __fmaf_rn(tMaxY, direction.z, origin.z);
+#else
+                raypos = tMaxY * direction + origin;
+#endif
             }
             else {
                 renderChunk.z += step.z;
                 if (renderChunk.z < (MAX_RENDER_DISTANCE - TODO_RENDER_DISTANCE) || (renderChunk.z > MAX_RENDER_DISTANCE + TODO_RENDER_DISTANCE)) break;
                 tMaxZ += step.z / direction.z;
-                // raypos = tMaxZ * direction + origin;
+#if USE_INTRINSICS
                 raypos.x = __fmaf_rn(tMaxZ, direction.x, origin.x);
                 raypos.y = __fmaf_rn(tMaxZ, direction.y, origin.y);
                 raypos.z = __fmaf_rn(tMaxZ, direction.z, origin.z);
+#else
+                raypos = tMaxZ * direction + origin;
+#endif
             }
         }
 
         raypos = fracf(raypos) * 16.0f;
     }
+
+    done:
 
     {
         int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -206,7 +274,7 @@ void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
     CUDA_TRY(cudaMallocPitch((void**)&kernelOutputBuffer, &g_bufferPitch, g_screenWidth * sizeof(uchar4), g_screenHeight * sizeof(uchar4)));
 }
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* devicePointers, void* arraySizes, const Viewport &viewport, const float3& viewEntity) {
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* devicePointers, const Viewport &viewport, const float3& viewEntity) {
     unsigned int blocksW = (unsigned int)ceilf(g_screenWidth / (float)BLOCK_SIZE);
     unsigned int blocksH = (unsigned int)ceilf(g_screenHeight / (float)BLOCK_SIZE);
     dim3 gridDim(blocksW, blocksH, 1);
@@ -219,7 +287,7 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* 
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, arraySizes, viewport, viewEntity, g_bufferPitch);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, devicePointers, viewport, viewEntity, g_bufferPitch);
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
@@ -232,7 +300,7 @@ void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* 
 
     // Transform origin to [0..1]
     origin = WorldToGrid(origin);
-    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch, (const Quad**)devicePointers, (const int*)arraySizes, viewport, origin, renderChunkY);
+    Kernel<<<gridDim, blockDim>>>(kernelOutputBuffer, g_screenWidth, g_screenHeight, g_bufferPitch, (const DevicePointers*)devicePointers, viewport, origin, renderChunkY);
 
     // Copy CUDA result to OpenGL texture
     cudaArray* mappedGLArray;

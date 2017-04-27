@@ -88,13 +88,9 @@ void Log(JNIEnv* env, const std::string& stdstr) {
 // Used in the kernel
 static Viewport viewport;
 
-// Host memory
-static void* h_octrees[DEVICE_PTRS_COUNT];
-static void* h_vertexBuffers[DEVICE_PTRS_COUNT];
-
-// Device memory backing arrays for textures
-static void* d_octrees;
-static void* d_vertexBuffers;
+static bool gridDirty;
+static DevicePointers h_devPtrs[DEVICE_PTRS_COUNT];
+static void* d_devPtrs;
 
 void Init(JNIEnv* env) {
     if (!gladLoadGL()) {
@@ -105,8 +101,7 @@ void Init(JNIEnv* env) {
 
     // Create CUDA arrays
     {
-        CUDA_TRY(cudaMalloc(&d_octrees, sizeof(h_octrees)));
-        CUDA_TRY(cudaMalloc(&d_vertexBuffers, sizeof(h_vertexBuffers)));
+        CUDA_TRY(cudaMalloc(&d_devPtrs, sizeof(h_devPtrs)));
     }
 
     cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
@@ -126,14 +121,9 @@ void Destroy(JNIEnv* env) {
     }
 
     // Free arrays
-    if (d_vertexBuffers) {
-        cudaFree(d_vertexBuffers);
-        d_vertexBuffers = NULL;
-    }
-
-    if (d_octrees) {
-        cudaFree(d_octrees);
-        d_octrees = NULL;
+    if (d_devPtrs) {
+        cudaFree(d_devPtrs);
+        d_devPtrs = NULL;
     }
 }
 
@@ -190,9 +180,13 @@ void Resize(JNIEnv* env, jint screenWidth, jint screenHeight) {
 static float3 viewEntity;
 
 jint Raytrace(JNIEnv* env) {
-    
-
-    rtRaytrace(env, gfxResource, texHeight, d_octrees, d_vertexBuffers, viewport, viewEntity);
+    // If the grid was changed in this frame, reupload it
+    if (gridDirty) {
+        gridDirty = false;
+        cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
+    }
+    rtRaytrace(env, gfxResource, texHeight, d_devPtrs, viewport, viewEntity);
+    gridDirty = false;
 
     return texture;
 }
@@ -211,28 +205,26 @@ void SetViewingPlane(JNIEnv* env, jobject arr) {
     viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
 
-static int bufferIndices[DEVICE_PTRS_COUNT];
-
 void ShiftGrid(int shiftX, int shiftZ) {
     if (shiftX != 0 && shiftX < GRID_DIM && shiftX > -GRID_DIM) {
         if (shiftX > 0) {
             // Shift right (copy left to right)
             // Start from right
-            memmove(&bufferIndices[shiftX * GRID_DIM * 16], bufferIndices, (GRID_DIM - shiftX) * GRID_DIM * 16 * sizeof(*bufferIndices));
+            memmove(&h_devPtrs[shiftX * GRID_DIM * 16], h_devPtrs, (GRID_DIM - shiftX) * GRID_DIM * 16 * sizeof(*h_devPtrs));
             // Invalidate left side
             for (int x = 0; x < shiftX; x++) {
                 for (int i = 0; i < GRID_DIM * 16; i++) {
-                    bufferIndices[x * GRID_DIM * 16 + i] = -1;
+                    h_devPtrs[x * GRID_DIM * 16 + i] = {};
                 }
             }
         } else {
             // Shift left (copy right to left)
             // Start from left
-            memmove(bufferIndices, &bufferIndices[-shiftX * GRID_DIM * 16], (GRID_DIM + shiftX) * GRID_DIM * 16 * sizeof(*bufferIndices));
+            memmove(h_devPtrs, &h_devPtrs[-shiftX * GRID_DIM * 16], (GRID_DIM + shiftX) * GRID_DIM * 16 * sizeof(*h_devPtrs));
             // Invalidate right side
             for (int x = GRID_DIM + shiftX; x < GRID_DIM; x++) {
                 for (int i = 0; i < GRID_DIM * 16; i++) {
-                    bufferIndices[x * GRID_DIM * 16 + i] = -1;
+                    h_devPtrs[x * GRID_DIM * 16 + i] = {};
                 }
             }
         }
@@ -241,7 +233,7 @@ void ShiftGrid(int shiftX, int shiftZ) {
         for (int x = 0; x < GRID_DIM; x++) {
             for (int z = 0; z < GRID_DIM; z++) {
                 for (int i = 0; i < 16; i++) {
-                    bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                    h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
                 }
             }
         }
@@ -253,14 +245,14 @@ void ShiftGrid(int shiftX, int shiftZ) {
             // Start from bottom
             for (int x = 0; x < GRID_DIM; x++) {
                 for (int z = GRID_DIM - 1; z >= shiftZ; z--) {
-                    memcpy(&bufferIndices[x * GRID_DIM + z * GRID_DIM * 16], &bufferIndices[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*bufferIndices));
+                    memcpy(&h_devPtrs[x * GRID_DIM + z * GRID_DIM * 16], &h_devPtrs[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*h_devPtrs));
                 }
             }
             // Invalidate top side
             for (int x = 0; x < GRID_DIM; x++) {
                 for (int z = 0; z < shiftZ; z++) {
                     for (int i = 0; i < 16; i++) {
-                        bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                        h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
                     }
                 }
             }
@@ -269,14 +261,14 @@ void ShiftGrid(int shiftX, int shiftZ) {
             // Start from top
             for (int x = 0; x < GRID_DIM; x++) {
                 for (int z = 0; z < -shiftZ; z++) {
-                    memcpy(&bufferIndices[x * GRID_DIM + z * GRID_DIM * 16], &bufferIndices[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*bufferIndices));
+                    memcpy(&h_devPtrs[x * GRID_DIM + z * GRID_DIM * 16], &h_devPtrs[x * GRID_DIM + (z - shiftZ) * GRID_DIM * 16], 16 * sizeof(*h_devPtrs));
                 }
             }
             // Invalidate bottom side
             for (int x = 0; x < GRID_DIM; x++) {
                 for (int z = GRID_DIM + shiftZ; z < GRID_DIM; z++) {
                     for (int i = 0; i < 16; i++) {
-                        bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                        h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
                     }
                 }
             }
@@ -286,7 +278,7 @@ void ShiftGrid(int shiftX, int shiftZ) {
         for (int x = 0; x < GRID_DIM; x++) {
             for (int z = 0; z < GRID_DIM; z++) {
                 for (int i = 0; i < 16; i++) {
-                    bufferIndices[x * GRID_DIM * 16 + z * 16 + i] = -1;
+                    h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
                 }
             }
         }
@@ -319,8 +311,19 @@ int DecodeMorton3Z(int code) {
 
 static std::set<std::tuple<int, int, int, int>> cells;
 static std::vector<int> grid[16][16][16];
-void BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
+static std::vector<int> builder;
+void* BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
     int duplicates = 0;
+
+    // Clear grid
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                grid[x][y][z].clear();
+            }
+        }
+    }
+
     for (int i = 0; i < numQuads; i++) {
         Quad& q = quads[i];
 
@@ -409,8 +412,8 @@ void BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
         Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" contains ") + std::to_string(duplicates) + std::string(" duplicate quads."));
     }
 
-    // Grid is filled, create octree
-    std::vector<int> builder(8, 0);
+    builder.clear();
+    builder.insert(builder.end(), { 0, 0, 0, 0, 0, 0, 0, 0 });
 
     // Walk across grid using z-order curve
     // https://en.wikipedia.org/wiki/Z-order_curve
@@ -481,58 +484,73 @@ void BuildOctree(JNIEnv* env, jint id, Quad* quads, int numQuads) {
         }
     }
 
-    // Clear grid
-    for (int x = 0; x < 16; x++) {
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                grid[x][y][z].clear();
-            }
-        }
-    }
+    // Upload octree to CUDA
+    void* devPtr;
+    size_t numBytes = builder.size() * sizeof(builder[0]);
+    cudaMalloc(&devPtr, numBytes);
+    cudaMemcpy(devPtr, builder.data(), numBytes, cudaMemcpyHostToDevice);
+    return devPtr;
 }
 
 struct VertexBuffer {
-    int x;
-    int y;
-    int z;
-    int layer;
+    int pos = -1;
+    //int layer;
     int numTris;
-    int index; // Index in quad or index (TBD) array
 };
 
 static int totalTriangles;
-static VertexBuffer counts[17424]; // 33 * 33 * 16 * 1
+static VertexBuffer counts[DEVICE_PTRS_COUNT];
+//static std::map<jint, VertexBuffer> counts;
 static int2 playerChunkPosition;
 
 void SetVertexBuffer(JNIEnv* env, jint id, jint x, jint y, jint z, jint layer, jobject data, jint size) {
     // TODO: Just using the Opaque layer for now
     assert(layer == 0);
-
-    // Input ID = 0..17423
-    // TODO: Probably breaks when changing draw distance due to a static counter in CppVertexBuffer.java
-    totalTriangles -= counts[id].numTris;
-    if (counts[id].index == -1) {
-        if (counts[id].x != x || counts[id].y != y || counts[id].z != z) {
-            //Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" location changed!"));
-        }
-    }
-    counts[id] = {};
-    counts[id].index = -1; // TODO
-    counts[id].x = x;
-    counts[id].y = y;
-    counts[id].z = z;
-    counts[id].layer = layer;
-    counts[id].numTris = size / VERTEX_SIZE_BYTES / 4 * 2;
-    totalTriangles += counts[id].numTris;
+    assert(id < DEVICE_PTRS_COUNT);
 
     int chunkX = x / 16 - playerChunkPosition.x + MAX_RENDER_DISTANCE;
     int chunkY = y / 16;
     int chunkZ = z / 16 - playerChunkPosition.y + MAX_RENDER_DISTANCE;
+    int idx = chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY;
 
-    bufferIndices[chunkX * GRID_DIM * 16 + chunkZ * 16 + chunkY] = id;
+    // Input ID = 0..17423
+    // TODO: Probably breaks when changing draw distance due to a static counter in CppVertexBuffer.java
+    totalTriangles -= counts[id].numTris;
+    if (counts[id].pos != idx) {
+        //Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" location changed!"));
+
+        // Free old resources
+
+        // TODO: layer index
+        if (h_devPtrs[counts[id].pos].octree) {
+            cudaFree(h_devPtrs[counts[id].pos].octree);
+            h_devPtrs[counts[id].pos].octree = NULL;
+        }
+        if (h_devPtrs[counts[id].pos].vertexBuffer) {
+            cudaFree(h_devPtrs[counts[id].pos].vertexBuffer);
+            h_devPtrs[counts[id].pos].vertexBuffer = NULL;
+        }
+    }
+
+    counts[id] = {};
+    counts[id].pos = idx;
+    //counts[id].layer = layer;
+    counts[id].numTris = size / VERTEX_SIZE_BYTES / 4 * 2;
+    totalTriangles += counts[id].numTris;
 
     Quad* buf = (Quad*) env->GetDirectBufferAddress(data);
-    BuildOctree(env, id, buf, size / VERTEX_SIZE_BYTES / 4);
+
+    // Upload vertex buffer to CUDA
+    void* devPtr;
+    cudaMalloc(&devPtr, size);
+    cudaMemcpy(devPtr, buf, size, cudaMemcpyHostToDevice);
+
+    void* octree = BuildOctree(env, id, buf, size / VERTEX_SIZE_BYTES / 4);
+
+    h_devPtrs[idx].octree = octree;
+    h_devPtrs[idx].vertexBuffer = devPtr;
+
+    gridDirty = true;
     
     //Log(env, std::string("Buffer ") + std::to_string(id) + std::string(" now contains ") + std::to_string(counts[id].numTris) + std::string(" triangles, total: ") + std::to_string(totalTriangles));
 }

@@ -35,6 +35,11 @@ struct Vertex {
     short tv;
 };
 
+struct DevicePointers {
+    void* octree;
+    void* vertexBuffer;
+};
+
 struct Pos4 {
     union {
         struct {
@@ -66,7 +71,7 @@ struct Viewport {
     float3 p2; // Bottom-left
 };
 
-void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* devicePointers, void* arraySizes, const Viewport &viewport, const float3& viewEntity);
+void rtRaytrace(JNIEnv*, cudaGraphicsResource_t glTexture, int texHeight, void* devicePointers, const Viewport &viewport, const float3& viewEntity);
 void rtResize(JNIEnv* env, int w, int h);
 
 void Log(JNIEnv*, const std::string&);
