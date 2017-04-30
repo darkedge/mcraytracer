@@ -187,7 +187,6 @@ jint Raytrace(JNIEnv* env) {
         cudaMemcpy(d_devPtrs, h_devPtrs, sizeof(h_devPtrs), cudaMemcpyHostToDevice);
     }
     rtRaytrace(env, gfxResource, texHeight, d_devPtrs, viewport, viewEntity);
-    gridDirty = false;
 
     return texture;
 }
@@ -206,8 +205,21 @@ void SetViewingPlane(JNIEnv* env, jobject arr) {
     viewport.origin = (viewport.p1 + viewport.p2) * 0.5f + originDir * originDistance;
 }
 
+// Note: shiftX and shiftZ are grid movement, not player movement!
 void ShiftGrid(int shiftX, int shiftZ) {
-    if (shiftX != 0 && shiftX < GRID_DIM && shiftX > -GRID_DIM) {
+    if (shiftX >= GRID_DIM || shiftX <= -GRID_DIM || shiftZ >= GRID_DIM || shiftZ <= -GRID_DIM) {
+        // Shifted so far everthing is off the grid
+        // Invalidate everything
+        for (int x = 0; x < GRID_DIM; x++) {
+            for (int z = 0; z < GRID_DIM; z++) {
+                for (int i = 0; i < 16; i++) {
+                    h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
+                }
+            }
+        }
+        return;
+    }
+    if (shiftX != 0) {
         if (shiftX > 0) {
             // Shift right (copy left to right)
             // Start from right
@@ -229,18 +241,8 @@ void ShiftGrid(int shiftX, int shiftZ) {
                 }
             }
         }
-    } else {
-        // Invalidate everything
-        for (int x = 0; x < GRID_DIM; x++) {
-            for (int z = 0; z < GRID_DIM; z++) {
-                for (int i = 0; i < 16; i++) {
-                    h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
-                }
-            }
-        }
-        return;
     }
-    if (shiftZ != 0 && shiftZ < GRID_DIM && shiftZ > -GRID_DIM) {
+    if (shiftZ != 0) {
         if (shiftZ > 0) {
             // Shift down (copy top to bottom)
             // Start from bottom
@@ -274,16 +276,6 @@ void ShiftGrid(int shiftX, int shiftZ) {
                 }
             }
         }
-    } else {
-        // Invalidate everything
-        for (int x = 0; x < GRID_DIM; x++) {
-            for (int z = 0; z < GRID_DIM; z++) {
-                for (int i = 0; i < 16; i++) {
-                    h_devPtrs[x * GRID_DIM * 16 + z * 16 + i] = {};
-                }
-            }
-        }
-        return;
     }
 }
 
@@ -644,7 +636,8 @@ void SetViewEntity(JNIEnv* env, jdouble x, jdouble y, jdouble z) {
     int chunkX = (int) floor(x / 16);
     int chunkZ = (int) floor(z / 16);
     if (chunkX != playerChunkPosition.x || chunkZ != playerChunkPosition.y) {
-        ShiftGrid(chunkX - playerChunkPosition.x, chunkZ - playerChunkPosition.y);
+        ShiftGrid(playerChunkPosition.x - chunkX, playerChunkPosition.y - chunkZ);
+        gridDirty = true;
         //Log(env, std::string("Shifted grid (") + std::to_string(chunkX - playerChunkPosition.x) + std::string(", ") + std::to_string(chunkZ - playerChunkPosition.y) + std::string("), new chunk positon: (") + std::to_string(chunkX) + std::string(", ") + std::to_string(chunkZ) + std::string(")"));
     }
     playerChunkPosition.x = chunkX;

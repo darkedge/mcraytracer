@@ -26,30 +26,33 @@ static float3 WorldToGrid(float3 f) {
 }
 
 // https://tavianator.com/fast-branchless-raybounding-box-intersections/
-__device__ bool IntersectRayAABB(float3 origin, float3 dirInv, char4 chunk, char i, float extents) {
+// Assume AABB is in [{0,0,0}, {16, 16, 16}]
+__device__ bool IntersectRayAABB(float3 origin, float3 dirInv, char4 level, float extents) {
     float3 min, max;
-    min.x = (float)chunk.x + (i & 1) * extents;
-    min.y = (float)chunk.y + ((i >> 1) & 1) * extents;
-    min.z = (float)chunk.z + (i >> 2) * extents;
+    // TODO: reinterpret char4 as int?
+    min.x = (float)(((level.x & 1) << 3) + ((level.y & 1) << 2) + ((level.z & 1) << 1) + (level.w & 1));
+    min.y = (float)(((level.x >> 1 & 1) << 3) + ((level.y >> 1 & 1) << 2) + ((level.z >> 1 & 1) << 1) + ((level.w >> 1) & 1));
+    // TODO: Test if these shifts cancel out (loss of information!)
+    min.z = (float)(((level.x >> 2) << 3) + ((level.y >> 2) << 2) + ((level.z >> 2) << 1) + (level.w >> 2));
 
     max.x = min.x + extents;
     max.y = min.y + extents;
     max.z = min.z + extents;
 
-    float t1 = (min.x - origin.x)*dirInv.x;
-    float t2 = (max.x - origin.x)*dirInv.x;
+    float t1 = (min.x - origin.x) * dirInv.x;
+    float t2 = (max.x - origin.x) * dirInv.x;
 
     float tmin = fminf(t1, t2);
     float tmax = fmaxf(t1, t2);
 
-    t1 = (min.y - origin.y)*dirInv.y;
-    t2 = (max.y - origin.y)*dirInv.y;
+    t1 = (min.y - origin.y) * dirInv.y;
+    t2 = (max.y - origin.y) * dirInv.y;
 
     tmin = fmaxf(tmin, fminf(t1, t2));
     tmax = fminf(tmax, fmaxf(t1, t2));
 
-    t1 = (min.x - origin.z)*dirInv.z;
-    t2 = (max.x - origin.z)*dirInv.z;
+    t1 = (min.z - origin.z) * dirInv.z;
+    t2 = (max.z - origin.z) * dirInv.z;
 
     tmin = fmaxf(tmin, fminf(t1, t2));
     tmax = fminf(tmax, fmaxf(t1, t2));
@@ -94,12 +97,17 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
         threadIdx.y * BLOCK_SIZE + threadIdx.x
     );
 
+    char foo = 0;
     float distance = FLT_MAX;
     while (true) {
         int index =
             (renderChunk.x * GRID_DIM << 4) +
             (renderChunk.z << 4) +
             renderChunk.y;
+
+        // TODO: Might be a good idea to check which child we're hitting first
+        // instead of iterating depth-first
+        // Could save a lot of time if we happen to trace from the "wrong" side
 
         // Get octree at this RenderChunk
         int* octree = (int*) vertexBuffers[index].octree;
@@ -111,23 +119,28 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
 
             // Traverse octree
             char4 abcd = make_char4(0, 0, 0, 0);
-            for (; abcd.x < 8; abcd.x++) {
+            for (abcd.x = 0; abcd.x < 8; abcd.x++) {
                 offset = head[abcd.x];
-                if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.x, 8.0f)) {
+                if (offset != 0 && IntersectRayAABB(raypos, dirInv, abcd, 8.0f)) {
+                    foo += 60;
                     head = octree + offset;
-                    for (; abcd.y < 8; abcd.y++) {
+                    for (abcd.y = 0; abcd.y < 8; abcd.y++) {
                         offset = head[abcd.y];
-                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.y, 4.0f)) {
+                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, abcd, 4.0f)) {
+                            foo += 60;
                             head = octree + offset;
-                            for (; abcd.z < 8; abcd.z++) {
+                            for (abcd.z = 0; abcd.z < 8; abcd.z++) {
                                 offset = head[abcd.z];
-                                if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.z, 2.0f)) {
+                                if (offset != 0 && IntersectRayAABB(raypos, dirInv, abcd, 2.0f)) {
+                                    foo += 60;
                                     head = octree + offset;
-                                    for (; abcd.w < 8; abcd.w++) {
+                                    for (abcd.w = 0; abcd.w < 8; abcd.w++) {
                                         offset = head[abcd.w];
-                                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, renderChunk, abcd.w, 1.0f)) {
+                                        if (offset != 0 && IntersectRayAABB(raypos, dirInv, abcd, 1.0f)) {
+                                            foo += 60;
                                             head = octree + offset;
                                             for (int i = 1; i < head[0]; i++) {
+                                                //foo++;
                                                 Quad *q = &quads[head[i]];
                                                 // Triangle 1
                                                 float3 v0v1 = q->v1.pos - q->v0.pos; // e1
@@ -178,7 +191,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
                                                     }
                                                 }
                                             }
-                                            if (distance != FLT_MAX) goto done;
+                                            //if (distance != FLT_MAX) goto done;
                                         }
                                     }
                                 }
@@ -189,6 +202,9 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
             }
         }
 
+        if (distance != FLT_MAX) goto done;
+
+        // Vision in chunks
 #define TODO_RENDER_DISTANCE 1
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
@@ -257,7 +273,7 @@ __global__ void Kernel(uchar4* dst, int width, int height, size_t bufferPitch, c
     }
 
     unsigned char val = distance != FLT_MAX ? 255 : 0;
-    *dst = make_uchar4(val, 0, 255, 255);
+    *dst = make_uchar4(val, foo, 255, 255);
 }
 
 void rtResize(JNIEnv* env, int screenWidth, int screenHeight) {
