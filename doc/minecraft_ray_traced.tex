@@ -109,13 +109,11 @@
 Minecraft is a 2011 first-person sandbox video game.
 Originally created by Markus \enquote{Notch} Persson, it is currently maintained by Mojang.
 
-
-Minecraft comes in multiple editions, for various platforms. This paper focuses on the PC version of Minecraft, released for Windows, macOS, and Linux.
+Minecraft comes in multiple editions, for various platforms. This paper focuses on PC version 1.10.2, released for Windows, macOS, and Linux.
 The PC version is written in Java.
 
 In Minecraft, the game world consists of a three-dimensional grid.
-The world is procedurally generated, using a 
-mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
+The world is procedurally generated, and mostly comprised of unit sized blocks, as shown in Figure \ref{fig:ss-worldgen}.
 
 \begin{figure}
   \includegraphics[width=\textwidth]{ss-worldgen.png}
@@ -124,24 +122,32 @@ mostly comprised of unit blocks, as shown in Figure \ref{fig:ss-worldgen}.
   \label{fig:ss-worldgen}
 \end{figure}
 
-\section{Related Work}
-
 \section{Minecraft Renderer}
-Minecraft uses multi-threaded chunk generation.
-Minecraft uses OpenGL.
-Minecraft has two options for rendering static geometry:
+Due to memory constraints, Minecraft divides the world up in chunks.
+These are 16$\times$256$\times$16 columns of blocks.
+As the player moves, the chunks that are closer to the player are loaded, while those further away are unloaded.
+The first time a chunk is loaded in a save file, it needs to be generated.
+Chunks are generated in a multi-threaded system.
+
+For rendering, Minecraft uses OpenGL.
+There exist two graphics options in the video settings:
 \begin{description}
   \item[Display Lists] An OpenGL 1.0 core function.
-    Display Lists are a group of OpenGL commands that have been compiled and sent to the GPU.
-    An object can then be drawn by calling the list.
-    The list can be reused, which means you do not have to send the data over again.
+    Display Lists are grouped commands which have been compiled and sent to the GPU.
+    An object can be drawn by calling a list.
+    This list can be reused, which means we do not have to send the data over again.
   \item[Vertex Buffer Objects] Vertex Buffer Objects (\enquote{VBOs}) were available in OpenGL 1.4 through an extension, and were later added to the core specification in version 2.1.
-    This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
+    This feature allows us to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
 \end{description}
-Our project makes use of Minecraft's VBO rendering, because we can extract the vertex data from the buffers.
+Our project makes use of Minecraft's VBO rendering, because this lets us extract the vertex data from the buffers.
 
 \subsection{RenderChunks}
-See figure \ref{fig:renderchunk}.
+A RenderChunk is a group of 16$\times$16$\times$16 blocks (see Figure \ref{fig:renderchunk}).
+Every chunk in the world is comprised of 16 RenderChunks.
+When a block is added or removed, the corresponding RenderChunks are re-meshed and re-uploaded to the GPU.
+The size of the RenderChunk results in small GPU buffer updates.
+As a downside, this means that Minecraft must manage a significant amount of small vertex buffers.
+The renderer uses frustum culling to remove most RenderChunks from the draw queue.
 
 \begin{figure}
   \centering
@@ -190,7 +196,7 @@ See figure \ref{fig:renderchunk}.
   \label{fig:renderchunk}
 \end{figure}
 
-There are four geometry groups, based on texture properties.
+There are four render layers, based on texture properties (Figure \ref{fig:ss-layers}).
 \begin{description}
   \item[Solid] Uses textures that are fully opaque. Most world blocks are in this group.
   \item[Cutout] Uses textures that have transparent texels.
@@ -198,19 +204,27 @@ There are four geometry groups, based on texture properties.
   \item[Translucent] Used for block which have partial transparency (alpha blending).
 \end{description}
 
-Vertex format:
+The render layers exist such that Minecraft can do transparency sorting and batching.
+Note: Our ray tracer has no use for this functionality.
+A RenderChunk has one vertex buffer for every layer.
+This results in further fragmentation of the vertex data.
+However, not all vertex buffers are always in use.
 
-\begin{tabular}{|l|r|r|r|} \hline
-  Attribute & Type & \# & Bytes\\ \hline
-  Position & float & 3 & 12 \\ \hline
-  Color & byte & 4 & 4 \\ \hline
-  Lightmap & float & 2 & 8 \\ \hline
-  Texture & short & 2 & 4 \\ \hline
-  Total &   &  & 28 \\ \hline
-\end{tabular}
+The vertex data from the world geometry contains four attributes (see Table \ref{tbl:vertex}).
 
-\subsection{Other rendering}
-\texttt{TileEntitySpecialRenderer} etc.
+\begin{table}
+  \centering
+  \begin{tabular}{|l|r|r|r|} \hline
+    Attribute & Type & \# & Bytes\\ \hline
+    Position & float & 3 & 12 \\ \hline
+    Color & byte & 4 & 4 \\ \hline
+    Lightmap & float & 2 & 8 \\ \hline
+    Texture & short & 2 & 4 \\ \hline \hline
+    \multicolumn{3}{|l|}{Total} & 28 \\ \hline
+  \end{tabular}
+  \caption{Vertex attributes.}
+  \label{tbl:vertex}
+\end{table}
 
 \begin{figure}
   \includegraphics[width=\textwidth]{ss-layers.png}
@@ -218,50 +232,45 @@ Vertex format:
   \caption{One object from each render layer. From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
   \label{fig:ss-layers}
 \end{figure}
-Every geometry group has its own vertex buffer.
 
 % TODO: Big disclaimer that source code names all come from MCP, not Mojang
 \section{Minecraft Forge}
 Minecraft Forge (\enquote{Forge}) is a community created platform for developing and using modifications ("mods") for Minecraft.\footnote{Modification of Minecraft ("modding") is not officially supported by Mojang. For more information, visit \url{https://account.mojang.com/terms}}
+It was released around November 2011.
 \subsection{Setting up a mod development environment}
-The Mod Development Kit (\enquote{MDK}) can be downloaded from the Forge website\footnote{\url{http://files.minecraftforge.net/}}.
-The MDK distribution includes ForgeGradle\footnote{\url{https://github.com/MinecraftForge/ForgeGradle}}.
-ForgeGradle is a plugin for the Gradle\footnote{\url{https://gradle.org/}} build system.
-The Minecraft binaries are downloaded, and subsequently decompiled, deobfuscated, 
-The classes are decompiled into srg names.
+The Mod Development Kit can be freely downloaded from the Forge website\footnote{\url{http://files.minecraftforge.net/}}.
+It includes scripts which set up a development environment for the creation of mods.
+Forge explicitly supports IntelliJ IDEA as development environment, which is what we will use.
+The Forge scripts download, decompile, and deobfuscate the Minecraft binaries.
+The deobfuscation is done with the help of the Mod Coder Pack\footnote{\url{http://www.modcoderpack.com/website/}}, a community effort which provides useful names to the source code.
 
-The Mod Coder Pack\footnote{\url{http://www.modcoderpack.com/website/}} is a package which is used to decompile, change, and recompile Minecraft Java classes.
 
-The Gradle tasks include:
-\begin{enumerate}
-  \item Download Minecraft .jar files.
-  \item Decompile the Minecraft 
-  \item Generate the Forge Minecraft binary
-\end{enumerate}
-
-Forge explicitly supports the Eclipse and IntelliJ integrated development environments (\enquote{IDEs}).
-We use IntelliJ IDEA Community.
-ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
-
-The path to our DLLs is passed to the virtual machine.
-
-\subsection{Differences between development and release builds}
-During development, Java loads our classpath directly.
-In release mode, our class files would have to be compressed into an archive first.
+%The path to our DLLs is passed to the virtual machine.
+%During development, Java loads our classpath directly.
+%In release mode, our class files would have to be compressed into an archive first.
 
 \subsection{Changes to Minecraft source code}
-Forge adds some new features to the Minecraft source code, in order to support multi-mod functionality.
+Aside from gaining access to Minecraft's source code, Forge inserts some code to make mod creation easier, and to provide mod compatibility.
+One of the major features is the event system.
+A class method can subscribe to an event, which causes the method to be called when the event is fired.
+There are events for a multitude of gameplay features.
+Another feature is the Ore Dictionary, which provides a compatibility layer for blocks between mods which share the same functionality.
 
 \subsection{Creating a mod}
 In general there are three approaches to creating a mod:
 \begin{enumerate}
   \item Build a mod on top of the Forge Minecraft code
   \item Edit the Minecraft source directly
-  \item Use class transformers in custom mod loading
+  \item Use class transformers during mod loading
 \end{enumerate}
 For most mods, the first approach is sufficient.
 This also enables the developer to freely distribute their mod.
 Editing the Minecraft source directly means that the mod cannot be redistributed, because the original Minecraft code is copyrighted.
+The Forge development environment prevents the user from editing Minecraft source files directly.
+The third approach should be used as a last resort.
+Class transformers allow a mod to change the bytecode of a vanilla Minecraft class at runtime.
+Mods which have class transformers are called \enquote{coremods}.
+This functionality holds a lot of power, but can cause compatibility issues with other coremods.
 
 \section{Hardware}
 This project is developed on the following machines:
@@ -350,18 +359,25 @@ Additionally, Java objects are passed as (subclasses of) \texttt{jobject} instan
 \subsection{CUDA}
 CUDA is a parallel computing platform and programming model developed by NVIDIA.
 It is only compatible with NVIDIA hardware.
-CUDA has two APIs: Runtime and Driver.
+We will be using the CUDA Runtime API (as opposed to the CUDA Driver API), as it is the easier of the two to use.
 \subsection{CUDA/OpenGL interoperability}
 CUDA provides an API for operating on OpenGL primitives.
+More specifically, it is able to map an OpenGL vertex buffer to a CUDA device pointer, allowing a CUDA kernel to access the contents of the buffer.
+We can also copy the contents of a CUDA buffer to an OpenGL texture.
+
+Our strategy for ray tracing will be as follows:
 \begin{enumerate}
+  \item Upload world data to CUDA
   \item Run the ray tracing kernel
-  \item Map the OpenGL texture to a CUDA array
+  \item Map an OpenGL texture to a CUDA array
   \item Copy the kernel output buffer to the CUDA array
+  \item Pass the OpenGL texture to Minecraft
 \end{enumerate}
 
 \subsection{Creating a Visual Studio project}
 For setting up the native part of the mod, we create a Visual Studio CUDA project.
 NVIDIA has a CUDA plugin for Visual Studio called Nsight.
+This sets up Visual Studio so we can write CUDA kernels.
 
 \tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=3.5cm]
 \tikzstyle{java}=[draw,rectangle,inner sep=0.3cm,rounded corners,node distance=3.5cm,minimum width=8em,minimum height=4em]
@@ -423,9 +439,11 @@ This is due to the Windows Display Driver Model (\enquote{WDDM}).
 An alternative would be to use the Tesla Compute Cluster driver (\enquote{TCC}).
 Unfortunately, TCC is not available for GeForce GPUs.
 Additionally, GPUs in TCC cannot be connected to a display.
+The measured overhead per kernel launch on both machines is roughly half a millisecond, which is not negligible.
+Therefore, we avoid executing multiple kernels per frame.
 
 \section{Ray Tracing OpenGL Vertex Buffers}
-My initial idea was to ray trace the uploaded VBOs from Minecraft directly.
+Our initial idea is to ray trace the uploaded VBOs from Minecraft directly.
 
 \subsection{Forge Events}
 %I wanted to see if I could make my mod work using the first approach.
@@ -757,9 +775,10 @@ We can also skip the second triangle if our first hit was successful.
 We initially only tested for hit vs non-hit.
 No texturing or lighting techniques were applied.
 Results were disappointing.
-The NVIDIA NSight profiler showed that the kernel is mostly dependent on memory reads.
+The NVIDIA Nsight profiler showed that the kernel is mostly dependent on memory reads.
 
 \section{Preprocessing Vertex Buffers}
+In our second attempt, we obtain the vertex buffers before they are uploaded to OpenGL, and insert the quads in an acceleration structure fit for ray tracing.
 
 \subsection{Obtaining the buffers}
 In order to get the raw vertex buffers from Java to C++, we change three more classes.
@@ -768,8 +787,9 @@ In order to get the raw vertex buffers from Java to C++, we change three more cl
 
 We created our own version of \texttt{VertexBuffer}.
 \texttt{VertexBuffer} contains a method called \texttt{bufferData} which uploads a \texttt{ByteBuffer} to OpenGL.
-We modify the \texttt{bufferData} function such that 
-We need extra information from \texttt{ChunkRenderDispatcher}.
+We modify the \texttt{bufferData} function such that the buffer is sent to C++ instead.
+However, we need extra information aside from the vertex data, such as position and an id.
+These can be obtained from \texttt{ChunkRenderDispatcher}.
 
 \begin{itemize}
   \item \texttt{RenderChunk} \\
@@ -779,13 +799,85 @@ We need extra information from \texttt{ChunkRenderDispatcher}.
     There is no inheritance, so we replace all references to \texttt{VertexBuffer}.
   \item \texttt{ChunkRenderDispatcher} \\
     In charge of uploading \texttt{RenderChunk}s to OpenGL.
+    We pass an additional position parameter to the uploading routine.
   \item \texttt{VertexBufferUploader} \\
   Passes calls from \texttt{ChunkRenderDispatcher} to \texttt{RenderChunk}.
   We change this class to support \texttt{CppVertexBuffer}.
-  
 \end{itemize}
 
 \subsection{C++}
+Not ray tracing the VBOs directly means we do not have to map and unmap them every frame, which saves us quite a bit of overhead.
+As acceleration structure, we have chosen to use an octree.
+An octree lets us divide a RenderChunk evenly, while culling a lot of nodes per collision hit.
+It is also cheap to build, as we can iterate over the quads and fit them to a leaf.
+There will be one octree for every RenderChunk, which means the octree will be 4 levels deep ($16^{3} = 8^{4} = 4096$).
+
+% TODO: continue here
+We upload the vertex buffer to CUDA instead of OpenGL.
+
+
+\begin{figure}
+  \centering
+  \begin{tikzpicture}[scale=2]
+  \coordinate (X) at (1,-1);
+  \coordinate (Y) at (-1,1);
+  
+  \draw (1,1) -- (1,0) -- (2,0) -- (2,1);
+  \draw[dotted]  (2,1) -- (1,1);
+  \draw (1,3) -- (1,2) -- (2,2) -- (2,3) -- (1,3);
+  \draw (3,2) -- (3,1) -- (4,1) -- (4,2) -- (3,2);
+  \draw (1,2) -- (1,1) -- (2,1) -- (2,2) -- (1,2);  
+  \draw (0,2) -- (0,1) -- (1,1) -- (1,2) -- (0,2);
+  \draw (2,2) -- (2,1) -- (3,1) -- (3,2) -- (2,2);
+  
+  \draw (1.5,0.5)node{Bottom};
+  \draw (1,1) node[below right] {$0$};
+  \draw (1,0) node[above right] {$1$};
+  \draw (2,0) node[above left] {$2$};
+  \draw (2,1) node[below left] {$3$};
+  
+  \draw (1.5,2.5)node{Top};  
+  \draw (1,3) node[below right] {$4$};
+  \draw (1,2) node[above right] {$5$};
+  \draw (2,2) node[above left] {$6$};
+  \draw (2,3) node[below left] {$7$};
+  
+  \draw (3.5,1.5)node{Back};  
+  \draw (3,2) node[below right] {$8$};
+  \draw (3,1) node[above right] {$9$};
+  \draw (4,1) node[above left] {$10$};
+  \draw (4,2) node[below left] {$11$};
+  
+  \draw (1.5,1.5)node{Front};  
+  \draw (1,2) node[below right] {$12$};
+  \draw (1,1) node[above right] {$13$};
+  \draw (2,1) node[above left] {$14$};
+  \draw (2,2) node[below left] {$15$};
+  
+  \draw (0.5,1.5)node{Left};  
+  \draw (0,2) node[below right] {$16$};
+  \draw (0,1) node[above right] {$17$};
+  \draw (1,1) node[above left] {$18$};
+  \draw (1,2) node[below left] {$19$};
+  
+  \draw (2.5,1.5)node{Right};  
+  \draw (2,2) node[below right] {$20$};
+  \draw (2,1) node[above right] {$21$};
+  \draw (3,1) node[above left] {$22$};
+  \draw (3,2) node[below left] {$23$};
+  
+  \draw[->] (-0.5,-0.5) -- (1,-0.5)node[anchor=west]{$x$};
+  \draw[->] (-0.5,-0.5) -- (-0.5,1)node[anchor=south]{$y$};
+  \end{tikzpicture}
+  \caption[Net of a single cube]{
+    The net of a single cube in a RenderChunk, after Minecraft finished meshing.
+    Numbers indicate the order of vertices in the vertex buffer.
+    There is no index array, so no vertices are shared.
+    Face order: bottom, top, back, front, left, right.
+    The vertex order is counter-clockwise and starts at the top-left.
+  }
+  \label{fig:cube}
+\end{figure}
 
 \subsection{CUDA}
 
@@ -803,66 +895,5 @@ Non-playable characters (\enquote{NPCs}) are not ray traced.
 \bibliographystyle{apalike}
 
 % TODO: Java class diagrams(minecraft, raytracer)
-\begin{figure}
-  \centering
-  \begin{tikzpicture}[scale=2]
-  \coordinate (X) at (1,-1);
-  \coordinate (Y) at (-1,1);
-  
-  \draw (1,1) -- (1,0) -- (2,0) -- (2,1);
-  \draw[dotted]  (2,1) -- (1,1);
-  \draw (1,3) -- (1,2) -- (2,2) -- (2,3) -- (1,3);
-  \draw (3,2) -- (3,1) -- (4,1) -- (4,2) -- (3,2);
-  \draw (1,2) -- (1,1) -- (2,1) -- (2,2) -- (1,2);  
-  \draw (0,2) -- (0,1) -- (1,1) -- (1,2) -- (0,2);
-  \draw (2,2) -- (2,1) -- (3,1) -- (3,2) -- (2,2);
-
-  \draw (1.5,0.5)node{$Bottom$};
-  \draw (1,1) node[below right] {$0$};
-  \draw (1,0) node[above right] {$1$};
-  \draw (2,0) node[above left] {$2$};
-  \draw (2,1) node[below left] {$3$};
-
-  \draw (1.5,2.5)node{$Top$};  
-  \draw (1,3) node[below right] {$4$};
-  \draw (1,2) node[above right] {$5$};
-  \draw (2,2) node[above left] {$6$};
-  \draw (2,3) node[below left] {$7$};
-
-  \draw (3.5,1.5)node{$Back$};  
-  \draw (3,2) node[below right] {$8$};
-  \draw (3,1) node[above right] {$9$};
-  \draw (4,1) node[above left] {$10$};
-  \draw (4,2) node[below left] {$11$};
-  
-  \draw (1.5,1.5)node{$Front$};  
-  \draw (1,2) node[below right] {$12$};
-  \draw (1,1) node[above right] {$13$};
-  \draw (2,1) node[above left] {$14$};
-  \draw (2,2) node[below left] {$15$};
-  
-  \draw (0.5,1.5)node{$Left$};  
-  \draw (0,2) node[below right] {$16$};
-  \draw (0,1) node[above right] {$17$};
-  \draw (1,1) node[above left] {$18$};
-  \draw (1,2) node[below left] {$19$};
-  
-  \draw (2.5,1.5)node{$Right$};  
-  \draw (2,2) node[below right] {$20$};
-  \draw (2,1) node[above right] {$21$};
-  \draw (3,1) node[above left] {$22$};
-  \draw (3,2) node[below left] {$23$};
-  
-  \draw[->] (-0.5,-0.5) -- (1,-0.5)node[anchor=west]{$x$};
-  \draw[->] (-0.5,-0.5) -- (-0.5,1)node[anchor=south]{$y$};
-  \end{tikzpicture}
-  \caption[Net of a single cube]{
-    The net of a single cube in a RenderChunk, after Minecraft finished meshing.
-    There is no index array, so no vertices are shared.
-    Face order: bottom, top, back, front, left, right.
-    The vertex order is counter-clockwise and starts at the top-left.
-  }
-  \label{fig:cube}
-\end{figure}
 
 \end{document}
