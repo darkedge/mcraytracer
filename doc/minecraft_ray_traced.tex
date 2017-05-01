@@ -229,7 +229,7 @@ The vertex data from the world geometry contains four attributes (see Table \ref
 \begin{figure}
   \includegraphics[width=\textwidth]{ss-layers.png}
   \centering
-  \caption{One object from each render layer. From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
+  \caption[One object from each render layer]{One object from each render layer. From left to right: Cobblestone (Solid), Glass (Cutout), Hopper (Cutout Mipped), and Stained Glass (Translucent).}
   \label{fig:ss-layers}
 \end{figure}
 
@@ -292,15 +292,17 @@ This project is developed on the following machines:
   \end{tabular}
 \end{center}
 
+Additionally, we leave the Minecraft window at the default resolution of 854x480 pixels, which equals 409920 rays (assuming one ray per pixel).
+
 % TODO: This part sucks
 \section{C++ and CUDA}
-We want to create a GPU ray tracer.
-There are various methods to achieve this. 
-We want to take advantage of the vertex buffers in CUDA.
-Because Minecraft uses OpenGL through the LWJGL\footnote{\url{https://www.lwjgl.org/}} library, we could have chosen to use OpenGL compute shaders.
-However, we have no experience with OpenGL compute shaders, whereas we do have experience with NVIDIA CUDA.
+%We want to create a GPU ray tracer.
+%There are various methods to achieve this. 
+%We want to take advantage of the vertex buffers in CUDA.
+%Because Minecraft uses OpenGL through the LWJGL\footnote{\url{https://www.lwjgl.org/}} library, we could have chosen to use OpenGL compute shaders.
+%However, we have no experience with OpenGL compute shaders, whereas we do have experience with NVIDIA CUDA.
 
-There exist Java bindings for CUDA, but using C++ removes our dependency on a binding layer.
+%There exist Java bindings for CUDA, but using C++ removes our dependency on a binding layer.
 \subsection{Java Native Interface}
 Java Native Interface (\enquote{JNI}) is a programming framework that allows for Java code to interact with native code.
 \subsubsection{javah}
@@ -774,7 +776,7 @@ We can also skip the second triangle if our first hit was successful.
 \subsection{Results}
 We initially only tested for hit vs non-hit.
 No texturing or lighting techniques were applied.
-Results were disappointing.
+Results were disappointing, as the performance was very poor (\textless 1 frame per second on the laptop machine), even after optimizing kernel register count and instruction latency.
 The NVIDIA Nsight profiler showed that the kernel is mostly dependent on memory reads.
 
 \section{Preprocessing Vertex Buffers}
@@ -812,9 +814,45 @@ An octree lets us divide a RenderChunk evenly, while culling a lot of nodes per 
 It is also cheap to build, as we can iterate over the quads and fit them to a leaf.
 There will be one octree for every RenderChunk, which means the octree will be 4 levels deep ($16^{3} = 8^{4} = 4096$).
 
-% TODO: continue here
-We upload the vertex buffer to CUDA instead of OpenGL.
+When we receive a vertex buffer from Minecraft, we build an octree.
+Our implementation of the octree consists of an array of integers:
 
+\begin{center}
+  \begin{tabular}{|l|l|l|l|l|l|l|l|c|l|l|l|l|l|l|l|l|} \cline{1-8} \cline{10-17}
+    0 & 0 & 8 & 0 & 64 & 0 & 0 & 0 & & 0 & 16 & 0 & 0 & 0 & 0 & 0 & 0 \\ \cline{1-8} \cline{10-17}
+  \end{tabular}
+\end{center}
+
+Every node in the array consists of 8 integers.
+A number indicates an offset in the array.
+Zero means the node is empty.
+In this example, the third child of the first node is non-empty.
+It contains the number 8, so we jump to the node located at element 8 in the array.
+The second child of this node is 16, so we jump to element 16.
+This continues until we found a node after 4 jumps.
+Then, the first integer in the node shows the amount of quads, followed by the indices of every quad in that cell.
+
+The octree is built as follows:
+\begin{enumerate}
+  \item Iterate over all quads in the vertex buffer
+  \item Find the cells this quad overlaps with
+  \item Encode the overlapped cells using a Morton code\footnote{\url{https://en.wikipedia.org/wiki/Z-order_curve}}
+  \item Store the encoded cells in a sorted list
+  \item Create node array with empty root node
+  \item Iterate over sorted list (depth-first due to Morton code property)
+  \item If Morton code is equal to previous iteration, add this quad to the node
+  \item Otherwise, add nodes depending on decoded Morton code, insert quad count (count ahead), and add first quad
+\end{enumerate}
+This method allows us to build node array in one go.
+It is also GPU friendly by using array indices rather than pointers.
+The vertex buffer and the octree are uploaded to CUDA.
+We store the two in a struct, and put this struct in the RenderChunk grid.
+Previously, we had two grids: one for vertex buffers, and one for array sizes.
+Now, we have one grid for both octrees and buffer pointers.
+
+Step 2 is actually a bit harder than it looks, because the quad vertices are positioned on grid corners.
+This eliminates the option to simply use the \texttt{floor} function.
+I needed to add a check for the direction of the edges, after researching how Minecraft did meshing (see Figure \ref{fig:cube}).
 
 \begin{figure}
   \centering
@@ -880,15 +918,49 @@ We upload the vertex buffer to CUDA instead of OpenGL.
 \end{figure}
 
 \subsection{CUDA}
+In CUDA, we replace the brute force collision test of all quads within a RenderChunk with a nested series of octree intersection tests.
+This requires that we add a ray-AABB intersection function to the kernel.
+A lot of variables can be reused during the nested for loop, so we are not sacrificing that many registers for it.
+We also prevented creating a recursive function, which causes stack size problems on GPGPU programs.
 
 \subsection{Results}
+We were not able to finish debugging the octree implementation.
+Theoretically, the memory access pattern is more favorable using this approach.
+There is also a lot of room for optimizations once we have a proof of concept working.
+The initial tests showed a result of 20+ frames per second on the desktop machine, but this information is not very useful if the kernel does not function properly.
 
 \section{Conclusion}
+There is still a lot of research that can be done in this area.
+Finishing the octree implementation and being able to compare it with the first approach would be the initial goal.
+Minecraft does not stitch quads together, which increases the polygon count.
+This is probably a contributing factor to the poor performance of the brute force approach.
+
+It has been shown that it is completely possible to implement a ray tracer in Minecraft.
+This has been mostly possible through the use of Java ASM.
+ASM is not the most elegant way of modding, but it is certainly powerful.
+
+Trapping access violations from your own modules using Visual Studio is only feasible when using the 2017 version.
+
+Using a loader DLL between Java and C++ is a good technique. However, proper memory management is essential.
 
 \section{Future work}
-We only got to work on the world rendering of the game.
-Viewmodels (player-held items) are not ray traced.
-Non-playable characters (\enquote{NPCs}) are not ray traced.
+Only a small fraction of the total work has been investigated.
+We currently only tested for hit versus miss on opaque blocks.
+No texturing or lighting calculations were done.
+Here is a list of things that could also be ray traced in-game:
+\begin{itemize}
+  \item Non-opaque blocks (Cutout, Cutout Mipped, Translucent)
+  \item Model blocks (chests, enchanting tables)
+  \item Non-playable characters (animals, enemies)
+  \item Viewmodels (player-held items)
+  \item Weather and particle effects
+  \item Camera effects (Nausea, sprinting, teleportation)
+  \item Dropped items
+\end{itemize}
+Another question is: What will the rays do once they hit a surface? Preferably, we would like to obtain material information when hitting an object, but we currently only store texture and lighting coordinates in the vertex data.
+Getting to know if we hit glass or water for example would make an interesting challenge.
+It is possible to hijack the Minecraft meshing procedure through heavy use of Java ASM, but no attempt was made.
+We could perhaps try to extract material information during that stage.
 
 \bibliography{minecraft_ray_traced}{}
 %\bibliographystyle{plain}
