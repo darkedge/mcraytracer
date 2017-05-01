@@ -85,8 +85,10 @@
   \vspace{2cm}
   
   \begin{abstract}
-    This project attempts to implement a GPU ray tracer in the video game Minecraft, using CUDA.
-    The ray tracing itself is done in CUDA. At first, I attempt to ray trace the vertex buffers given by Minecraft. Then, I implement my own data structures for increased performance.
+    This project attempts to implement a GPU ray tracer in Minecraft.
+    The ray tracing itself is done in CUDA.
+    First, we attempt to ray trace the Minecraft OpenGL vertex buffers directly.
+    Then, we implement our own data structures for increased performance.
   \end{abstract}
   
   \vfill
@@ -136,7 +138,7 @@ Minecraft has two options for rendering static geometry:
   \item[Vertex Buffer Objects] Vertex Buffer Objects (\enquote{VBOs}) were available in OpenGL 1.4 through an extension, and were later added to the core specification in version 2.1.
     This feature allows you to have a buffer with vertex information, and telling the driver where and how the attributes are stored in the buffer.
 \end{description}
-My project makes use of Minecraft's VBO rendering, because I can extract the vertex data from the buffers.
+Our project makes use of Minecraft's VBO rendering, because we can extract the vertex data from the buffers.
 
 \subsection{RenderChunks}
 See figure \ref{fig:renderchunk}.
@@ -238,14 +240,14 @@ The Gradle tasks include:
 \end{enumerate}
 
 Forge explicitly supports the Eclipse and IntelliJ integrated development environments (\enquote{IDEs}).
-I used IntelliJ IDEA Community.
+We use IntelliJ IDEA Community.
 ForgeGradle gives you the option of debugging and building both client and server sides of Minecraft.
 
-The path to my DLLs is passed to the virtual machine.
+The path to our DLLs is passed to the virtual machine.
 
 \subsection{Differences between development and release builds}
-During development, Java loads my classpath directly.
-In release mode, my class files would have to be compressed into an archive first.
+During development, Java loads our classpath directly.
+In release mode, our class files would have to be compressed into an archive first.
 
 \subsection{Changes to Minecraft source code}
 Forge adds some new features to the Minecraft source code, in order to support multi-mod functionality.
@@ -281,19 +283,20 @@ This project is developed on the following machines:
   \end{tabular}
 \end{center}
 
+% TODO: This part sucks
 \section{C++ and CUDA}
-I wanted to create a GPU ray tracer.
+We want to create a GPU ray tracer.
 There are various methods to achieve this. 
-I wanted to take advantage of the vertex buffers in CUDA.
-Because Minecraft uses OpenGL through the LWJGL\footnote{\url{https://www.lwjgl.org/}} library, I could have chosen to use OpenGL compute shaders.
-However, I have no experience with OpenGL compute shaders, whereas I do have experience with NVIDIA CUDA.
+We want to take advantage of the vertex buffers in CUDA.
+Because Minecraft uses OpenGL through the LWJGL\footnote{\url{https://www.lwjgl.org/}} library, we could have chosen to use OpenGL compute shaders.
+However, we have no experience with OpenGL compute shaders, whereas we do have experience with NVIDIA CUDA.
 
-There exist Java bindings for CUDA, but using C++ removes my dependency on a binding layer.
+There exist Java bindings for CUDA, but using C++ removes our dependency on a binding layer.
 \subsection{Java Native Interface}
 Java Native Interface (\enquote{JNI}) is a programming framework that allows for Java code to interact with native code.
 \subsubsection{javah}
 \texttt{javah} is a tool that generates C header and source files for Java classes that declare native methods.
-I use the generated header file in my Visual Studio project.
+We use the generated header file in our Visual Studio project.
 The header file is compatible with C++ code bases as it includes an \texttt{\#ifdef \_\_cplusplus} directive which prepends an \texttt{extern \char`\"C"} to the function declarations.
 \cite{noauthor_jni_nodate} Function parameters are passed as the following:
 % TODO: citation
@@ -357,7 +360,7 @@ CUDA provides an API for operating on OpenGL primitives.
 \end{enumerate}
 
 \subsection{Creating a Visual Studio project}
-For setting up the native part of the mod, I created a Visual Studio CUDA project.
+For setting up the native part of the mod, we create a Visual Studio CUDA project.
 NVIDIA has a CUDA plugin for Visual Studio called Nsight.
 
 \tikzstyle{dll}=[draw,rectangle,text width=2cm,text centered,node distance=3.5cm]
@@ -396,23 +399,23 @@ NVIDIA has a CUDA plugin for Visual Studio called Nsight.
 
 \subsubsection{Reloading C++}
 Java IDEs such as IntelliJ support hot-swapping of method bodies by using the HotSwap functionality of the Java Platform Debugger Architecture.
-I created something similar for my native code by using a technique called DLL reloading.
-Once a native library has been loaded by the JVM, I cannot make changes to it.
-Therefore I am using a passthrough DLL, which passes the calls from Java to another DLL.
-I have shown this in Figure \ref{fig:modules}.
+We created something similar for our native code by using a technique called DLL reloading.
+Once a native library has been loaded by the JVM, we cannot make changes to it.
+Therefore we are using a passthrough DLL, which passes the calls from Java to another DLL.
+We have shown this in Figure \ref{fig:modules}.
 
 \subsubsection{Setting up the Visual Studio debugger}
-IntelliJ debug sessions are good for testing if my Java ASM works correctly, and if my JNI bindings are set up properly.
+IntelliJ debug sessions are good for testing if our Java ASM works correctly, and if our JNI bindings are set up properly.
 However, if an error occurs a native part, the debug session ends immediately.
 The crash output from IntelliJ is unable to use the debug information from Visual Studio.
-I wanted to use the Visual Studio debugger for the native part.
-I had to launch java.exe with the right command line arguments and working directory.
-I looked at the launch parameters given to java.exe when starting a debug session from IntelliJ.
+We use the Visual Studio debugger for the native part.
+We launch java.exe with the right command line arguments and working directory.
+We looked at the launch parameters given to java.exe when starting a debug session from IntelliJ.
 The Visual Studio debugger can be configured to launch Minecraft by copying the command line arguments from an IntelliJ debug session.
 The JVM uses the access violation signal internally for its memory exception handling.
 When an access violation is thrown from the JVM, this can be safely ignored.
 However, Visual Studio can easily block hundreds of these signals.
-Visual Studio 2017 offers an option to ignore certain exceptions per module, allowing me to break on access violations in my own native code while ignoring those coming from the JVM.
+Visual Studio 2017 offers an option to ignore certain exceptions per module, allowing me to break on access violations in our own native code while ignoring those coming from the JVM.
 
 \subsection{Kernel overhead on Windows}
 There is a non-trivial amount of overhead attached to the launch of a CUDA kernel on Windows.
@@ -432,15 +435,15 @@ The \texttt{Raytracer} class listens to the following events:
   \item \texttt{FMLInitializationEvent} \\
     As the name indicates, this event is fired when Forge is initializing Minecraft.
     This event is used to initialize the mod.
-    Here I also obtain a reference to the \texttt{Minecraft} singleton class.
+    Here we also obtain a reference to the \texttt{Minecraft} singleton class.
     The mod needs to be registered in the \texttt{ClientRegistry} in order to receive further Forge events.
   \item \texttt{TickEvent.ClientTickEvent} \\
     This event is fired 20 times per second, and can be regarded as the client-sided update function.
-    I listen to this event to check for keyboard input changes.
+    We listen to this event to check for keyboard input changes.
   \item \texttt{GuiScreenEvent.InitGuiEvent.Pre} \\
     This is the first event that is fired when a window resize is detected.
-    The event does not contain any resize information, so I track it manually.
-    The resolution information in the \texttt{Minecraft} class is public, so I extract it from there.
+    The event does not contain any resize information, so we track it manually.
+    The resolution information in the \texttt{Minecraft} class is public, so we extract it from there.
     The information is passed to C++, such that the CUDA and OpenGL resources can be resized if they need to be.
     OpenGL supports resizing by calling \texttt{glTexImage2D} with the new information, without having to call \texttt{glGenTextures} again.
     In CUDA, it is required to unregister and re-register the associated graphics resource.
@@ -450,23 +453,23 @@ The \texttt{Raytracer} class listens to the following events:
   \item \texttt{TickEvent.RenderTickEvent} \\
     This event is fired when Minecraft starts rendering the next frame.
     
-    In order to prevent Minecraft from drawing the world after I have done the ray tracing, I copy the \texttt{WorldClient} reference from \texttt{Minecraft}, and set the value in \texttt{Minecraft} to \texttt{null}.
+    In order to prevent Minecraft from drawing the world after we have done the ray tracing, we copy the \texttt{WorldClient} reference from \texttt{Minecraft}, and set the value in \texttt{Minecraft} to \texttt{null}.
     This effectively causes Minecraft to skip the rendering of the game world, because it has an internal check for the \texttt{WorldClient} there.
     If it is \texttt{null}, nothing is rendered.
     However, this also disables rendering of the game overlay, which contains elements like the player inventory and menu's.
-    I manually draw the game overlay after drawing the ray tracing result to the screen.
+    We manually draw the game overlay after drawing the ray tracing result to the screen.
   \item \texttt{GuiScreenEvent.DrawScreenEvent.Pre} \& \texttt{GuiScreenEvent.DrawScreenEvent.Post} \\
-    I noticed that the background of the game overlay was solid instead of transparent.
+    We noticed that the background of the game overlay was solid instead of transparent.
     This is due to another check for the \texttt{WorldClient} instance during drawing.
-    Because I previously made it \texttt{null}, I now have to restore it on the \texttt{GuiScreenEvent.DrawScreenEvent.Pre} event in order to draw the background.
-    I set it back to null at the \texttt{GuiScreenEvent.DrawScreenEvent.Post} event.
+    Because we previously made it \texttt{null}, we now have to restore it on the \texttt{GuiScreenEvent.DrawScreenEvent.Pre} event in order to draw the background.
+    We set it back to null at the \texttt{GuiScreenEvent.DrawScreenEvent.Post} event.
   %\item \texttt{GuiOpenEvent} \\
     %Fired when the top-level menu changes.
 \end{itemize}
-I was able to draw a full-screen texture using CUDA and copy it to Minecraft using OpenGL.
-However, I am not able to obtain the Minecraft vertex buffers using Forge Events alone.
-That is where I either needed to change the Minecraft source directly, or use Java ASM.
-I chose the second option.
+We were able to draw a full-screen texture using CUDA and copy it to Minecraft using OpenGL.
+However, we are not able to obtain the Minecraft vertex buffers using Forge Events alone.
+That is where we either need to change the Minecraft source directly, or use Java ASM.
+We chose the second option.
 
 % TODO: Did I already define what ASM is somewhere?
 % TODO: This part assumes deobfuscated source code; make sure that's mentioned
@@ -551,7 +554,7 @@ RETURN
 LOCALVARIABLE this Lcom/marcojonkers/mcraytracer/Renderer; 0
 LOCALVARIABLE raytracer Lcom/marcojonkers/mcraytracer/Raytracer; 1
 \end{lstlisting}
-\caption[Example bytecode]{Example bytecode for the constructor of my \texttt{Renderer} class. Note the use of Java VM signatures. \texttt{ALOAD} puts a \texttt{LOCALVARIABLE} (listed at the bottom) on the stack. Method parameters and \texttt{this} are implicit local variables.}
+\caption[Example bytecode]{Example bytecode for the constructor of our \texttt{Renderer} class. Note the use of Java VM signatures. \texttt{ALOAD} puts a \texttt{LOCALVARIABLE} (listed at the bottom) on the stack. Method parameters and \texttt{this} are implicit local variables.}
 \label{fig:bytecode}
 \end{figure}
 
@@ -732,7 +735,7 @@ We calculate the ray direction for every pixel by linearly interpolating the cor
 
 We use this in a 3D voxel traversal algorithm from \cite{amanatides1987fast}.
 Amanatides et al. do not explain how to obtain the value of $t$ at which a ray crosses the first voxel boundary.
-I have put the method in equation \ref{eq:findfirstt}.
+We have put the method in equation \ref{eq:findfirstt}.
 
 \begin{equation}
 f(x, dx) =
@@ -791,7 +794,7 @@ We need extra information from \texttt{ChunkRenderDispatcher}.
 \section{Conclusion}
 
 \section{Future work}
-I only got to work on the world rendering of the game.
+We only got to work on the world rendering of the game.
 Viewmodels (player-held items) are not ray traced.
 Non-playable characters (\enquote{NPCs}) are not ray traced.
 
